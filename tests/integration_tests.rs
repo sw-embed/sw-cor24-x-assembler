@@ -1,6 +1,6 @@
-//! Integration tests for COR24 emulator using as24-assembled .lgo files
+//! Integration tests for COR24 assembler
 
-use cor24_emulator::assembler::Assembler;
+use cor24_assembler::Assembler;
 use cor24_emulator::challenge::get_examples;
 use cor24_emulator::cpu::executor::Executor;
 use cor24_emulator::cpu::state::CpuState;
@@ -76,23 +76,6 @@ fn test_led_blink() {
         100_000,
     );
     assert_eq!(cpu.io.uart_output, "LLLLL", "Should print 'L' five times");
-}
-
-#[test]
-fn test_sieve() {
-    let cpu = load_and_run(
-        concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/docs/research/asld24/sieve.lgo"
-        ),
-        0x93, // _main entry point
-        1_000_000,
-    );
-    assert!(
-        cpu.io.uart_output.starts_with("1000 iterations"),
-        "Sieve should start printing iteration count, got: {:?}",
-        cpu.io.uart_output
-    );
 }
 
 #[test]

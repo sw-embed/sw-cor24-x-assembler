@@ -1,7 +1,7 @@
-//! COR24 Assembly Emulator - Educational Programming Tool
+//! COR24 Assembler
 //!
-//! A browser-based emulator that teaches COR24 assembly programming through
-//! interactive examples and challenges.
+//! Parses COR24 assembly language and produces machine code.
+//! Uses encoding tables extracted from the hardware decode ROM.
 //!
 //! COR24 is a C-Oriented RISC 24-bit architecture with:
 //! - 3 general-purpose 24-bit registers (r0, r1, r2)
@@ -12,28 +12,9 @@
 //! - Little-endian byte ordering
 
 pub mod assembler;
-pub mod challenge;
-pub mod cpu;
-pub mod emulator;
-pub mod loader;
-
-// Yew app (only for standalone wasm32 builds)
-#[cfg(all(target_arch = "wasm32", feature = "standalone"))]
-pub mod app;
-#[cfg(all(target_arch = "wasm32", feature = "standalone"))]
-pub mod c_examples;
-#[cfg(all(target_arch = "wasm32", feature = "standalone"))]
-pub mod rust_examples;
-
-// WASM bindings (only for standalone wasm32 builds)
-#[cfg(all(target_arch = "wasm32", feature = "standalone"))]
-pub mod wasm;
 
 // Re-export main types for convenience
 pub use assembler::{AssembledLine, Assembler, AssemblyResult};
-pub use challenge::{Challenge, get_challenges, get_examples};
-pub use cpu::{
-    CpuState, DecodeRom, ExecuteResult, Executor, INITIAL_SP, MEMORY_SIZE, RESET_ADDRESS,
-};
-pub use emulator::{BatchResult, CpuSnapshot, EmulatorCore, StopReason};
-pub use loader::{LoadResult, load_lgo};
+
+// Re-export emulator types that assembler consumers typically need
+pub use cor24_emulator;

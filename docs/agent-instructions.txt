@@ -1,8 +1,0 @@
-run agentrail --help
-and look at how agenrail is used in these related projects
-~/github/softwarewrighter/web-dv24r
-~/github/sw-vibe-coding/pv24a
-especially their CLAUDE.md file.
-Then read this project's docs/research.txt to create the agentrail saga.
-This project builds on top of pv24a (the p-code VM for COR24 in as24).
-Questions?

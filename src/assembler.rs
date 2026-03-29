@@ -3,8 +3,8 @@
 //! Parses COR24 assembly language and produces machine code.
 //! Uses encoding tables extracted from the hardware decode ROM.
 
-use crate::cpu::encode;
-use crate::cpu::instruction::Opcode;
+use cor24_emulator::cpu::encode;
+use cor24_emulator::cpu::instruction::Opcode;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -1153,7 +1153,7 @@ mod tests {
 
     #[test]
     fn test_led_blink_integration() {
-        use crate::cpu::{CpuState, Executor};
+        use cor24_emulator::cpu::{CpuState, Executor};
 
         // Minimal LED blink test: load LED address, write value, halt
         let code = r#"
@@ -1179,7 +1179,7 @@ mod tests {
         for i in 0..3 {
             let res = executor.step(&mut cpu);
             assert!(
-                matches!(res, crate::cpu::ExecuteResult::Ok),
+                matches!(res, cor24_emulator::cpu::ExecuteResult::Ok),
                 "Step {} failed: {:?}",
                 i,
                 res
@@ -1224,7 +1224,7 @@ mod tests {
 
     #[test]
     fn test_branch_loop_integration() {
-        use crate::cpu::{CpuState, Executor};
+        use cor24_emulator::cpu::{CpuState, Executor};
 
         // Count down from 3 to 0 using branch loop:
         //   lc r0,3          ; r0 = 3

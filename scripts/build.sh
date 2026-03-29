@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+echo "=== cargo build ==="
+cargo build
+
+echo "=== cargo clippy ==="
+cargo clippy -- -D warnings
+
+echo "=== cargo test ==="
+cargo test
+
+echo "=== All checks passed ==="
