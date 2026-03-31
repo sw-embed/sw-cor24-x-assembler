@@ -1,4 +1,4 @@
-# sw-cor24-assembler
+# sw-cor24-x-assembler
 
 COR24 assembler library — parses COR24 assembly language and produces machine code.
 

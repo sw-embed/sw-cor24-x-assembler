@@ -4,7 +4,7 @@ This file provides guidance to Claude Code when working with this repository.
 
 ## Overview
 
-`sw-cor24-assembler` is a Rust library that parses COR24 assembly language and produces machine code. It depends on `cor24-emulator` for ISA definitions and CPU types.
+`sw-cor24-x-assembler` is a Rust library that parses COR24 assembly language and produces machine code. It depends on `cor24-emulator` for ISA definitions and CPU types.
 
 Part of the [COR24 ecosystem](https://github.com/sw-embed/sw-cor24-project).
 
