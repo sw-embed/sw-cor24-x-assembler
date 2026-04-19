@@ -1,0 +1,1 @@
+Added Links (Blog: Software Wrighter Lab, Discord, YouTube) and License (Copyright (c) 2026 Michael A Wright, MIT) sections to README.md, matching style of recent sibling sw-embed READMEs.

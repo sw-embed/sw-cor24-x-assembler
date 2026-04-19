@@ -1,0 +1,1 @@
+Rewrote CLAUDE.md to match sibling sw-embed style: added devgroup branching/PR workflow, dg-* helpers, full AgentRail session protocol, .agentrail/ directory rules, useful commands, and cross-repo sibling references. Also unignored .agentrail/ in .gitignore and committed initial saga scaffold.
