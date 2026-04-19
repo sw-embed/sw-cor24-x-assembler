@@ -1,0 +1,1 @@
+Saga complete: CLAUDE.md synced with devgroup AgentRail/branching policy and README.md updated with standard Links/License sections.
