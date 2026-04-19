@@ -1,6 +1,6 @@
 number = 2
 slug = "readme-links-license"
-status = "pending"
+status = "in-progress"
 description = "Add standard Links section (Blog: Software Wrighter Lab, Discord, YouTube) an..."
 role = "production"
 context_files = []
