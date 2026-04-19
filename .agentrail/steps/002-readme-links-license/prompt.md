@@ -1,0 +1,1 @@
+Add standard Links section (Blog: Software Wrighter Lab, Discord, YouTube) and License section (Copyright (c) 2026 Michael A Wright, MIT-licensed, see LICENSE) to README.md — matching the style used in recent sibling sw-embed READMEs (e.g. sw-cor24-plsw, sw-cor24-pcode).

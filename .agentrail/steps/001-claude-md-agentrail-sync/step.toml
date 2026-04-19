@@ -1,0 +1,8 @@
+number = 1
+slug = "claude-md-agentrail-sync"
+status = "in-progress"
+description = "Update CLAUDE.md to include the devgroup branching/PR policy, AgentRail sessi..."
+role = "production"
+context_files = []
+created_at = "2026-04-18T20:28:19"
+commits = []

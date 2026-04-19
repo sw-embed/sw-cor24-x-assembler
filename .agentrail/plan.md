@@ -1,0 +1,1 @@
+Sync CLAUDE.md with devgroup AgentRail/branching workflow used by sibling sw-embed repos, and update README.md with standard Links (blog/discord/youtube) and License sections. Two steps: claude-md-agentrail-sync (CLAUDE.md), readme-links-license (README.md).
