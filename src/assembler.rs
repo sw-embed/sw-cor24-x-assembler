@@ -286,16 +286,14 @@ impl Assembler {
                 }
             }
             // .ascii and .asciz not supported by reference as24
-            ".comm" => {
-                // BSS allocation: .comm symbol, size
-                // Defines label at current address and advances by size
-                // No bytes emitted (memory is zero-initialized)
-                if parts.len() >= 3 {
-                    let sym = parts[1].trim_matches(',');
-                    if let Some(size) = self.parse_number(parts[2].trim_matches(',')) {
-                        self.labels.insert(sym.to_string(), self.address);
-                        self.address += size;
-                    }
+            // BSS allocation: .comm symbol, size. Defines label at current
+            // address and advances by size. No bytes emitted (memory is
+            // zero-initialized).
+            ".comm" if parts.len() >= 3 => {
+                let sym = parts[1].trim_matches(',');
+                if let Some(size) = self.parse_number(parts[2].trim_matches(',')) {
+                    self.labels.insert(sym.to_string(), self.address);
+                    self.address += size;
                 }
             }
             // Directives that are safe to ignore in flat memory model
