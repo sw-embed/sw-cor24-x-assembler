@@ -1,0 +1,1 @@
+Fix pre-existing clippy::collapsible_match lint at src/assembler.rs:293 that surfaced once the cor24-emulator sibling was cloned and ./scripts/build.sh could actually run in this worktree. Single step: collapse the nested if into the outer match arm guard, verify build+clippy+test all green, commit.
