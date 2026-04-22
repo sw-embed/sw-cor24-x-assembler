@@ -1,0 +1,1 @@
+Collapsed the nested 'if parts.len() >= 3' inside the '.comm' arm of src/assembler.rs into a match-arm guard, clearing clippy::collapsible_match. Verified ./scripts/build.sh fully green (cargo build + clippy -D warnings + 20 integration tests + unit tests).

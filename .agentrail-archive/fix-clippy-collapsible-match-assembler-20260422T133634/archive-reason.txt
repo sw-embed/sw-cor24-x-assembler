@@ -1,0 +1,1 @@
+Single-step saga complete: clippy::collapsible_match resolved in src/assembler.rs and full build pipeline is green.
