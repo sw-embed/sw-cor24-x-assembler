@@ -14,7 +14,29 @@ Part of the [COR24 ecosystem](https://github.com/sw-embed/sw-cor24-project).
 ./scripts/build.sh
 ```
 
-## Usage
+The build produces both the library and the `cor24-asm` CLI binary
+at `target/<profile>/cor24-asm`.
+
+## CLI
+
+`cor24-asm` is the canonical command for `.s → .lgo`. It can also emit
+raw machine-code bytes (`.bin`) and a human-readable listing (`.lst`).
+
+```bash
+cor24-asm prog.s                                       # writes prog.lgo
+cor24-asm prog.s -o out.lgo                            # explicit .lgo output
+cor24-asm prog.s --bin out.bin                         # raw machine code
+cor24-asm prog.s -o out.lgo --bin out.bin --listing out.lst   # all three
+cor24-asm -                                            # stdin → stdout (.lgo)
+cor24-asm -V | --version                               # version
+cor24-asm -h | --help                                  # usage
+```
+
+Exit codes: `0` clean assembly, `1` assembly errors (one per line on
+stderr), `2` usage / IO errors. When writing `.lgo` or `.bin` to
+stdout, the destination must not be a terminal.
+
+## Library Usage
 
 ```rust
 use cor24_assembler::Assembler;

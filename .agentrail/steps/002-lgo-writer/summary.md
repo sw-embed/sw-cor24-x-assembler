@@ -1,0 +1,1 @@
+Added public src/lgo.rs with cor24_assembler::lgo::write. Emits L-lines (≤36 data bytes each, uppercase hex) and optional G-line for entry addr. 8 unit tests including round-trip through cor24_emulator::loader::load_lgo. cargo build/clippy/test all green.

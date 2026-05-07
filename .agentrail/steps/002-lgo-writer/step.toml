@@ -1,0 +1,12 @@
+number = 2
+slug = "lgo-writer"
+status = "completed"
+description = """
+Implement the .lgo writer as a public library module in `src/lgo.rs`.
+
+Public..."""
+role = "production"
+context_files = []
+created_at = "2026-05-06T22:10:24"
+completed_at = "2026-05-06T22:12:16"
+commits = ["fe92f9439e56d73671385cbc8f03b102a017c00b"]

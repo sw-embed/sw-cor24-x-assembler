@@ -12,6 +12,8 @@
 //! - Little-endian byte ordering
 
 pub mod assembler;
+pub mod lgo;
+pub mod listing;
 
 // Re-export main types for convenience
 pub use assembler::{AssembledLine, Assembler, AssemblyResult};

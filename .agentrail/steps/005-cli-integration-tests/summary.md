@@ -1,0 +1,1 @@
+Added cli/tests/cli.rs with 11 integration tests via CARGO_BIN_EXE_cor24-asm and cli/tests/fixtures/simple.s as canonical fixture (4 known bytes: 44 2A 13 FC). Added tempfile dev-dep. All tests pass; clippy --workspace --tests clean.

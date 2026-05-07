@@ -1,0 +1,1 @@
+Converted top-level Cargo.toml to a workspace (members: '.', 'cli'). Added cli/ subcrate with [[bin]] cor24-asm — currently a stub printing 'not yet implemented'. cargo build/clippy/test all green. Saga .agentrail/ scaffolding committed alongside.
