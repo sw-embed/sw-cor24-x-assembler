@@ -1,0 +1,8 @@
+number = 4
+slug = "cli-binary"
+status = "in-progress"
+description = "Implement the cor24-asm CLI binary. Replace the stub `cli/src/main.rs` with a..."
+role = "production"
+context_files = []
+created_at = "2026-05-06T22:13:50"
+commits = []

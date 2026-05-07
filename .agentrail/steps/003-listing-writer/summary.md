@@ -1,0 +1,1 @@
+Added public src/listing.rs with cor24_assembler::listing::write. Byte-for-byte match of emulator's --assemble emitter, including the 1-col offset quirk. 6 unit tests covering empty, bytes-line format, source-only format, mixed lines, empty-bytes-and-source skip, and round-trip via Assembler. cargo build/clippy/test all green.
