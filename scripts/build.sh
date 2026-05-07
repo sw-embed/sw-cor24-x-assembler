@@ -2,12 +2,12 @@
 set -euo pipefail
 
 echo "=== cargo build ==="
-cargo build
+cargo build --workspace
 
 echo "=== cargo clippy ==="
-cargo clippy -- -D warnings
+cargo clippy --workspace --tests -- -D warnings
 
 echo "=== cargo test ==="
-cargo test
+cargo test --workspace
 
 echo "=== All checks passed ==="
