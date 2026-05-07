@@ -1,0 +1,8 @@
+number = 1
+slug = "workspace-and-cli-scaffold"
+status = "in-progress"
+description = "Convert the top-level Cargo.toml to a Cargo workspace and add a `cli/` subcra..."
+role = "production"
+context_files = []
+created_at = "2026-05-06T22:09:24"
+commits = []

@@ -1,0 +1,14 @@
+[package]
+name = "cor24-asm-cli"
+version = "0.1.0"
+edition = "2024"
+authors = ["Michael A Wright"]
+license = "MIT"
+description = "COR24 cross-assembler command-line interface"
+
+[[bin]]
+name = "cor24-asm"
+path = "src/main.rs"
+
+[dependencies]
+cor24-assembler = { path = ".." }
