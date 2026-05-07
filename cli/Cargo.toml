@@ -12,3 +12,6 @@ path = "src/main.rs"
 
 [dependencies]
 cor24-assembler = { path = ".." }
+
+[dev-dependencies]
+tempfile = "3"
