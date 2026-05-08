@@ -1,6 +1,6 @@
 number = 6
 slug = "readme-and-build-script"
-status = "in-progress"
+status = "completed"
 description = """
 Update the README and build script to reflect the new CLI surface.
 
@@ -8,4 +8,5 @@ README (`..."""
 role = "production"
 context_files = []
 created_at = "2026-05-06T22:18:02"
-commits = []
+completed_at = "2026-05-06T22:18:42"
+commits = ["ea120709f97f5d63cbb805ee5047b48182044e86"]
