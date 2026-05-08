@@ -4,9 +4,19 @@ use std::process::{Command, Stdio};
 use tempfile::TempDir;
 
 const FIXTURE_SRC: &str = include_str!("fixtures/simple.s");
+const WITH_LA_SRC: &str = include_str!("fixtures/with_la.s");
 
 /// Machine code for `simple.s` (`lc r0,42 / halt: / bra halt`).
 const FIXTURE_BYTES: &[u8] = &[0x44, 0x2A, 0x13, 0xFC];
+
+/// Machine code for `with_la.s` assembled at base 0x100. The `la r0, target`
+/// operand encodes 0x000104 (= base + offset of `target:` after the 4-byte la).
+/// Provenance: hand-verified against the documented `--base-addr` semantics from
+/// sw-cor24-emulator commit ba96d75. cor24-run on $PATH at PR-author time was
+/// found to predate ba96d75 (printed the old "Wrote N bytes" success line and
+/// did NOT bake the base into the `la` operand), so it was unsuitable as a
+/// byte-identical reference; the fixture file is checked into the repo.
+const WITH_LA_AT_0X100_BYTES: &[u8] = include_bytes!("fixtures/with_la_at_0x100.bin");
 
 fn cor24_asm() -> Command {
     Command::new(env!("CARGO_BIN_EXE_cor24-asm"))
@@ -15,6 +25,12 @@ fn cor24_asm() -> Command {
 fn write_fixture(dir: &TempDir) -> std::path::PathBuf {
     let p = dir.path().join("simple.s");
     std::fs::write(&p, FIXTURE_SRC).unwrap();
+    p
+}
+
+fn write_with_la_fixture(dir: &TempDir) -> std::path::PathBuf {
+    let p = dir.path().join("with_la.s");
+    std::fs::write(&p, WITH_LA_SRC).unwrap();
     p
 }
 
@@ -184,4 +200,109 @@ fn help_prints_usage() {
     assert!(out.status.success());
     let stdout = String::from_utf8(out.stdout).unwrap();
     assert!(stdout.contains("USAGE"), "stdout: {}", stdout);
+}
+
+#[test]
+fn base_addr_hex_shifts_lgo_addresses() {
+    let dir = TempDir::new().unwrap();
+    let src = write_fixture(&dir);
+    let out_path = dir.path().join("custom.lgo");
+
+    let out = cor24_asm()
+        .arg(&src)
+        .arg("--base-addr").arg("0x1000")
+        .arg("-o").arg(&out_path)
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+
+    let content = std::fs::read_to_string(&out_path).unwrap();
+    assert!(content.starts_with("L001000"), "expected L001000... got: {:?}", content);
+}
+
+#[test]
+fn base_addr_decimal_equals_hex() {
+    let dir = TempDir::new().unwrap();
+    let src = write_fixture(&dir);
+    let hex_path = dir.path().join("hex.lgo");
+    let dec_path = dir.path().join("dec.lgo");
+
+    cor24_asm().arg(&src).arg("--base-addr").arg("0x1000").arg("-o").arg(&hex_path).output().unwrap();
+    cor24_asm().arg(&src).arg("--base-addr").arg("4096").arg("-o").arg(&dec_path).output().unwrap();
+
+    assert_eq!(std::fs::read(&hex_path).unwrap(), std::fs::read(&dec_path).unwrap());
+}
+
+#[test]
+fn base_addr_h_suffix_equals_hex() {
+    let dir = TempDir::new().unwrap();
+    let src = write_fixture(&dir);
+    let hex_path = dir.path().join("prefix.lgo");
+    let sfx_path = dir.path().join("suffix.lgo");
+
+    cor24_asm().arg(&src).arg("--base-addr").arg("0x1000").arg("-o").arg(&hex_path).output().unwrap();
+    cor24_asm().arg(&src).arg("--base-addr").arg("1000h").arg("-o").arg(&sfx_path).output().unwrap();
+
+    assert_eq!(std::fs::read(&hex_path).unwrap(), std::fs::read(&sfx_path).unwrap());
+}
+
+#[test]
+fn base_addr_invalid_exits_2() {
+    let dir = TempDir::new().unwrap();
+    let src = write_fixture(&dir);
+
+    let out = cor24_asm().arg(&src).arg("--base-addr").arg("not-a-number").output().unwrap();
+    assert_eq!(out.status.code(), Some(2));
+    let stderr = String::from_utf8(out.stderr).unwrap();
+    assert!(stderr.contains("--base-addr"), "stderr: {:?}", stderr);
+}
+
+#[test]
+fn base_addr_missing_arg_exits_2() {
+    let dir = TempDir::new().unwrap();
+    let src = write_fixture(&dir);
+
+    let out = cor24_asm().arg(&src).arg("--base-addr").output().unwrap();
+    assert_eq!(out.status.code(), Some(2));
+}
+
+#[test]
+fn base_addr_byte_identical_regression() {
+    let dir = TempDir::new().unwrap();
+    let src = write_with_la_fixture(&dir);
+    let bin_path = dir.path().join("out.bin");
+
+    let out = cor24_asm()
+        .arg(&src)
+        .arg("--base-addr").arg("0x100")
+        .arg("--bin").arg(&bin_path)
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+
+    let bytes = std::fs::read(&bin_path).unwrap();
+    assert_eq!(bytes, WITH_LA_AT_0X100_BYTES,
+        "byte mismatch — {} vs fixture {}",
+        bytes.iter().map(|b| format!("{:02X}", b)).collect::<Vec<_>>().join(" "),
+        WITH_LA_AT_0X100_BYTES.iter().map(|b| format!("{:02X}", b)).collect::<Vec<_>>().join(" "),
+    );
+}
+
+#[test]
+fn base_addr_listing_uses_absolute_addresses() {
+    let dir = TempDir::new().unwrap();
+    let src = write_fixture(&dir);
+    let lst_path = dir.path().join("out.lst");
+
+    let out = cor24_asm()
+        .arg(&src)
+        .arg("--base-addr").arg("0x100")
+        .arg("--listing").arg(&lst_path)
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+
+    let listing = std::fs::read_to_string(&lst_path).unwrap();
+    assert!(listing.contains("0100:"), "listing missing 0100: line:\n{}", listing);
+    assert!(!listing.contains("0000:"), "listing should not have 0000: line at base 0x100:\n{}", listing);
 }

@@ -1,63 +1,72 @@
-# Saga: cor24-asm-cli
+# Saga: cor24-asm-base-addr
 
 ## Goal
 
-Add a `cor24-asm` CLI binary to `sw-cor24-x-assembler` that takes COR24
-assembly text and produces three optional output artifacts: `.lgo` (default),
-`.bin`, and `.lst` (listing). This consolidates "assemble" responsibility
-in this binary so `cor24-emu`'s `--run` and `--assemble` modes can be
-removed in dcemu's follow-up saga (`pr/remove-internal-assembler`).
+Add `--base-addr <addr>` to the `cor24-asm` CLI so the binary can
+match what the deprecated `cor24-run --assemble --base-addr` did.
+This unblocks dcpls's two pass-2 reassembly callsites in
+`pr/bootstrap-toolchain` (linker tests) currently TODO'd against
+`cor24-asm`.
 
-Brief: /disk1/github/softwarewrighter/devgroup/tools/briefs/dcxas-cor24-asm-cli.md
+Brief: /disk1/github/softwarewrighter/devgroup/tools/briefs/dcxas-cor24-asm-base-addr.md
+Reference: `git show ba96d75` in sw-cor24-emulator (original
+`--base-addr` impl, before dcemu's removal saga deleted it).
 
-## Architectural boundary
+## Library backing
 
-- `.lgo` reader/loader → `sw-cor24-emulator` (stays put).
-- `.lgo` / `.bin` / `.lst` writers → here, in `sw-cor24-x-assembler`.
-- This crate must NOT take a hard dep on `cor24_emulator::assembler` symbols;
-  dcemu's follow-up saga deletes that module.
+Already present in `src/assembler.rs`:
+- `pub fn assemble_at(&mut self, source: &str, base_address: u32) -> AssemblyResult`
+- `AssembledLine.address` is **absolute** (base_addr + offset).
+- Five existing tests cover assemble_at semantics
+  (`test_assemble_at_*`).
 
-## Design defaults
+`src/lgo.rs::write` already takes `base_addr: u32` and emits
+`L<base+chunk_offset>...` records. Just needs the CLI to pass it
+through (currently hard-coded `0`).
 
-- `.lgo` writer: 36 data bytes per `L` line (matches existing fixtures
-  `count_down.lgo`, `hello_world.lgo`).
-- `.lgo` G-line policy: never emit in this PR. Downstream uses
-  `cor24-emu --lgo` which doesn't require G. A future `--entry` flag can
-  add G emission if/when needed.
-- `.lst` listing: byte-for-byte match the emulator's existing emitter at
-  `sw-cor24-emulator/cli/src/run.rs:1602-1617`, including the 1-col offset
-  quirk between bytes-line and source-only-line branches (don't normalize).
+`src/listing.rs` writes `{:04X}` of `line.address`, which is
+already absolute — no change needed.
+
+## Design
+
+- Numeric address parser mirrors the reference impl: `0x` prefix,
+  trailing `h` suffix, or decimal. Rejects everything else with
+  exit 2.
+- CLI default: `0` (no regression vs current behavior).
+- New helper `parse_numeric_addr(s: &str) -> Option<u32>` in main.rs.
 
 ## Steps (planned)
 
-1. **workspace-and-cli-scaffold** — convert top-level Cargo.toml to a
-   workspace, add `cli/` subcrate with `Cargo.toml` (`name =
-   "cor24-asm-cli"`, `[[bin]] name = "cor24-asm"`) and a stub `main.rs`.
-   Confirm `cargo build --workspace` and `cargo clippy --workspace -- -D
-   warnings` pass.
-2. **lgo-writer** — new `src/lgo.rs` with `pub fn write(bytes: &[u8],
-   base_addr: u32, entry: Option<u32>, w: &mut impl io::Write) ->
-   io::Result<()>`. Round-trip test through `cor24_emulator::loader`.
-3. **listing-writer** — new `src/listing.rs` with `pub fn
-   write(result: &AssemblyResult, w: &mut impl io::Write) ->
-   io::Result<()>`. Fixture test against a known-good listing string.
-4. **cli-binary** — `cli/src/main.rs`: positional input (file or `-`),
-   `-o`/`--bin`/`--listing` outputs, `-V`/`-h`, exit codes 0/1/2, TTY
-   refusal for binary outputs, vergen version block mirroring `cor24-dbg`.
-5. **cli-integration-tests** — `cli/tests/cli.rs` (or top-level
-   `tests/cli.rs`). Cover default `<stem>.lgo`, `-o`, `--bin`, all-three
-   combo, stdin/stdout pipe round-trip for `.lgo`, broken input → exit 1,
-   missing input → exit 2, `-V` parses cleanly.
-6. **readme-and-build-script** — README adds CLI section, renames "Usage"
-   to "Library Usage". `scripts/build.sh` builds the workspace.
+1. **archive-and-cli-plumbing** — archive prior saga (already done
+   pre-init), init this saga, add `--base-addr` flag to
+   `cli/src/main.rs` (parser + `Cli.base_addr` field +
+   `parse_numeric_addr` helper + USAGE update), swap
+   `asm.assemble(&source)` to `asm.assemble_at(&source,
+   cli.base_addr)`, plumb `cli.base_addr` into `lgo::write` calls.
+   Smoke-test with file/stdin paths. Commit.
+2. **regression-tests** — capture a real fixture from the still-on-
+   PATH `cor24-run --assemble --base-addr 0x100 ...` for
+   byte-identical regression. Add CLI integration tests in
+   `cli/tests/cli.rs` (hex / decimal / `h` suffix accepted, invalid
+   exits 2, no flag = default 0 = unchanged output, byte-identical
+   regression). One library `.lgo` round-trip test confirming
+   non-zero base produces correct L-record addresses.
+3. **docs-and-final** — README CLI section gains `--base-addr` row;
+   `./scripts/build.sh` end-to-end green; commit; complete --done;
+   `dg-mark-pr`.
 
 ## Out of scope
 
-- No changes to `sw-cor24-emulator`.
-- No language-toolchain orchestrator (`devgroup/tools/build-all`).
-- Phases 2-3 of the assembler roadmap (`sw-cor24-hlasm`, self-hosting).
+- No emulator changes (`cor24-emu`).
+- No new output formats.
+- No FIXUP record emission (linker concern).
+- No removal of `Default::default()` or `Assembler::new()` (additive
+  only — library API already supports both call shapes).
 
 ## When done
 
-`dg-mark-pr` to rename `feat/cor24-asm-cli` → `pr/cor24-asm-cli`. Mike
-relays via `dg-relay dcxas sw-cor24-x-assembler pr/cor24-asm-cli`.
+`dg-mark-pr` to rename `feat/cor24-asm-base-addr` →
+`pr/cor24-asm-base-addr`. Mike relays via
+`dg-relay dcxas sw-cor24-x-assembler pr/cor24-asm-base-addr`. After
+relay + reinstall, dcpls flips the two TODO'd `cor24-run --assemble
+--base-addr` callsites in their `bootstrap-toolchain` saga.

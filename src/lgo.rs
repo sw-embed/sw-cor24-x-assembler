@@ -112,6 +112,21 @@ mod tests {
     }
 
     #[test]
+    fn write_high_base_addr_chunks_correctly() {
+        // 50 bytes at base 0x010000 → first L at 0x010000 (36 bytes), second
+        // L at 0x010024 (14 bytes). Exercises 6-hex addressing past 0xFFFF.
+        let bytes: Vec<u8> = (0..50u8).collect();
+        let out = render(&bytes, 0x010000, None);
+        let mut lines = out.lines();
+        let l1 = lines.next().unwrap();
+        let l2 = lines.next().unwrap();
+        assert!(lines.next().is_none());
+
+        assert!(l1.starts_with("L010000"), "first line: {}", l1);
+        assert!(l2.starts_with("L010024"), "second line: {}", l2);
+    }
+
+    #[test]
     fn roundtrip_through_loader_with_entry() {
         let original = [0x80, 0x65, 0x2B];
         let out = render(&original, 0x000000, Some(0x000093));

@@ -22,6 +22,13 @@ USAGE:
     cor24-asm -V | --version                             Print version
     cor24-asm -h | --help                                Print this help
 
+OPTIONS:
+    --base-addr <addr>    Assemble at a non-zero base address. Labels resolve
+                          to base + offset; .lgo L-records and .lst addresses
+                          shift accordingly. Output bytes still start at offset
+                          0 (no leading padding). Accepts 0x-prefixed hex,
+                          h-suffixed hex, or decimal. Default: 0.
+
 EXIT CODES:
     0    clean assembly
     1    assembly errors (one per line on stderr)
@@ -73,6 +80,7 @@ struct Cli {
     lgo: LgoSink,
     bin: Option<PathBuf>,
     listing: Option<PathBuf>,
+    base_addr: u32,
 }
 
 fn run(args: Vec<OsString>) -> Result<ExitCode, String> {
@@ -108,6 +116,18 @@ fn run(args: Vec<OsString>) -> Result<ExitCode, String> {
                     .ok_or_else(|| "--listing requires an argument".to_string())?;
                 cli.listing = Some(PathBuf::from(v));
             }
+            "--base-addr" => {
+                let v = iter
+                    .next()
+                    .ok_or_else(|| "--base-addr requires an argument".to_string())?;
+                let s = v.to_string_lossy();
+                cli.base_addr = parse_numeric_addr(&s).ok_or_else(|| {
+                    format!(
+                        "invalid --base-addr value '{}': expected hex (0x.../...h) or decimal",
+                        s
+                    )
+                })?;
+            }
             "-" => {
                 if cli.input.is_some() {
                     return Err("multiple inputs not supported".to_string());
@@ -139,7 +159,7 @@ fn run(args: Vec<OsString>) -> Result<ExitCode, String> {
     let source = read_input(&input).map_err(|e| format!("{}: {}", input.label(), e))?;
 
     let mut asm = Assembler::new();
-    let result = asm.assemble(&source);
+    let result = asm.assemble_at(&source, cli.base_addr);
 
     if !result.errors.is_empty() {
         let label = input.label();
@@ -171,17 +191,17 @@ fn write_outputs(input: &InputSource, cli: &Cli, result: &AssemblyResult) -> Res
                 InputSource::File(p) => default_lgo_path(p),
                 InputSource::Stdin => {
                     // stdin with no -o: write .lgo to stdout (refuse TTY).
-                    return write_lgo_to_stdout(result)
+                    return write_lgo_to_stdout(result, cli.base_addr)
                         .and_then(|_| write_optional_extras(cli, result));
                 }
             };
-            write_lgo_to_path(&path, result)?;
+            write_lgo_to_path(&path, result, cli.base_addr)?;
         }
         LgoSink::Explicit(p) => {
             if p == Path::new("-") {
-                write_lgo_to_stdout(result)?;
+                write_lgo_to_stdout(result, cli.base_addr)?;
             } else {
-                write_lgo_to_path(p, result)?;
+                write_lgo_to_path(p, result, cli.base_addr)?;
             }
         }
         LgoSink::None => {}
@@ -221,18 +241,33 @@ fn default_lgo_path(input: &Path) -> PathBuf {
     p
 }
 
-fn write_lgo_to_path(path: &Path, result: &AssemblyResult) -> Result<(), String> {
+fn write_lgo_to_path(path: &Path, result: &AssemblyResult, base_addr: u32) -> Result<(), String> {
     let mut f =
         fs::File::create(path).map_err(|e| format!("creating {}: {}", path.display(), e))?;
-    lgo::write(&result.bytes, 0, None, &mut f)
+    lgo::write(&result.bytes, base_addr, None, &mut f)
         .map_err(|e| format!("writing {}: {}", path.display(), e))
 }
 
-fn write_lgo_to_stdout(result: &AssemblyResult) -> Result<(), String> {
+fn write_lgo_to_stdout(result: &AssemblyResult, base_addr: u32) -> Result<(), String> {
     refuse_tty("cannot write .lgo to a terminal")?;
     let mut out = io::stdout().lock();
-    lgo::write(&result.bytes, 0, None, &mut out)
+    lgo::write(&result.bytes, base_addr, None, &mut out)
         .map_err(|e| format!("writing .lgo to stdout: {}", e))
+}
+
+/// Parse a numeric address. Accepts:
+/// - `0x`/`0X` prefix → hex
+/// - trailing `h`/`H` suffix → hex
+/// - otherwise → decimal
+fn parse_numeric_addr(s: &str) -> Option<u32> {
+    let s = s.trim();
+    if let Some(hex) = s.strip_prefix("0x").or_else(|| s.strip_prefix("0X")) {
+        u32::from_str_radix(hex, 16).ok()
+    } else if let Some(hex) = s.strip_suffix('h').or_else(|| s.strip_suffix('H')) {
+        u32::from_str_radix(hex, 16).ok()
+    } else {
+        s.parse::<u32>().ok()
+    }
 }
 
 fn refuse_tty(msg: &str) -> Result<(), String> {
