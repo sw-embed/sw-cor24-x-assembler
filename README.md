@@ -27,10 +27,17 @@ cor24-asm prog.s                                       # writes prog.lgo
 cor24-asm prog.s -o out.lgo                            # explicit .lgo output
 cor24-asm prog.s --bin out.bin                         # raw machine code
 cor24-asm prog.s -o out.lgo --bin out.bin --listing out.lst   # all three
+cor24-asm prog.s --base-addr 0x1000 -o out.lgo         # assemble at non-zero base
 cor24-asm -                                            # stdin → stdout (.lgo)
 cor24-asm -V | --version                               # version
 cor24-asm -h | --help                                  # usage
 ```
+
+`--base-addr <addr>` shifts the location counter and bakes the base
+into label resolution (so `la r0, foo` resolves to `base + offset_of(foo)`).
+Output bytes still start at offset 0; only addresses (labels, `.lgo`
+L-records, `.lst` columns) move. Accepts `0x...` hex, `...h` hex, or
+decimal. Default 0.
 
 Exit codes: `0` clean assembly, `1` assembly errors (one per line on
 stderr), `2` usage / IO errors. When writing `.lgo` or `.bin` to

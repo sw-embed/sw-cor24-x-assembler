@@ -1,8 +1,9 @@
 number = 2
 slug = "regression-tests"
-status = "in-progress"
+status = "completed"
 description = "Add tests proving the --base-addr CLI plumbing is correct, including a byte-i..."
 role = "production"
 context_files = []
 created_at = "2026-05-07T18:59:38"
-commits = []
+completed_at = "2026-05-07T20:21:09"
+commits = ["04283003719da667405810d050608c91116f7ff9"]
