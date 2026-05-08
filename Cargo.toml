@@ -14,9 +14,12 @@ description = "COR24 C-Oriented RISC 24-bit Assembler"
 crate-type = ["rlib"]
 
 [dependencies]
-cor24-emulator = { path = "../sw-cor24-emulator" }
+cor24-isa = { path = "../sw-cor24-isa" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+
+[dev-dependencies]
+cor24-emulator = { path = "../sw-cor24-emulator" }
 
 [profile.release]
 opt-level = "z"

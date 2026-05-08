@@ -1,0 +1,6 @@
+name = "cor24-asm-base-addr"
+status = "completed"
+current_step = 3
+created_at = "2026-05-07T18:47:00"
+plan_file = ".agentrail/plan.md"
+retroactive = false

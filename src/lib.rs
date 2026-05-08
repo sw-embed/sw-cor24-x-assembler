@@ -17,6 +17,3 @@ pub mod listing;
 
 // Re-export main types for convenience
 pub use assembler::{AssembledLine, Assembler, AssemblyResult};
-
-// Re-export emulator types that assembler consumers typically need
-pub use cor24_emulator;

@@ -1,10 +1,81 @@
 //! Integration tests for COR24 assembler
 
 use cor24_assembler::Assembler;
-use cor24_emulator::challenge::get_examples;
 use cor24_emulator::cpu::executor::Executor;
 use cor24_emulator::cpu::state::CpuState;
 use cor24_emulator::loader::load_lgo;
+
+/// Locally-bundled replacement for the `cor24_emulator::challenge::get_examples`
+/// helper that existed before dcemu's `pr/remove-internal-assembler` saga.
+/// Each tuple is `(display_name, source)`. Display names match the originals so
+/// existing per-example tests continue to look them up by name.
+fn examples() -> Vec<(&'static str, &'static str)> {
+    vec![
+        ("Add", include_str!("../src/examples/assembler/add.s")),
+        ("Assert", include_str!("../src/examples/assembler/assert.s")),
+        (
+            "Blink LED",
+            include_str!("../src/examples/assembler/blink_led.s"),
+        ),
+        (
+            "Button Echo",
+            include_str!("../src/examples/assembler/button_echo.s"),
+        ),
+        (
+            "Comments",
+            include_str!("../src/examples/assembler/comments.s"),
+        ),
+        (
+            "Countdown",
+            include_str!("../src/examples/assembler/countdown.s"),
+        ),
+        ("Echo", include_str!("../src/examples/assembler/echo.s")),
+        (
+            "Fibonacci",
+            include_str!("../src/examples/assembler/fibonacci.s"),
+        ),
+        (
+            "Literals",
+            include_str!("../src/examples/assembler/literals.s"),
+        ),
+        (
+            "Loop Trace",
+            include_str!("../src/examples/assembler/loop_trace.s"),
+        ),
+        (
+            "Memory Access",
+            include_str!("../src/examples/assembler/memory_access.s"),
+        ),
+        (
+            "Multiply",
+            include_str!("../src/examples/assembler/multiply.s"),
+        ),
+        (
+            "Nested Calls",
+            include_str!("../src/examples/assembler/nested_calls.s"),
+        ),
+        (
+            "Stack Variables",
+            include_str!("../src/examples/assembler/stack_variables.s"),
+        ),
+        (
+            "UART Hello",
+            include_str!("../src/examples/assembler/uart_hello.s"),
+        ),
+        (
+            "Variables",
+            include_str!("../src/examples/assembler/variables.s"),
+        ),
+    ]
+}
+
+fn example_source(name: &str) -> &'static str {
+    examples()
+        .into_iter()
+        .find(|(n, _)| *n == name)
+        .unwrap_or_else(|| panic!("missing example: {}", name))
+        .1
+}
 
 /// Load an LGO file, set PC, run for max_cycles
 fn load_and_run(lgo_path: &str, entry: u32, max_cycles: u64) -> CpuState {
@@ -80,8 +151,7 @@ fn test_led_blink() {
 
 #[test]
 fn test_all_examples_assemble() {
-    let examples = get_examples();
-    for (name, _desc, source) in &examples {
+    for (name, source) in examples() {
         let mut assembler = Assembler::new();
         let result = assembler.assemble(source);
         assert!(
@@ -97,12 +167,7 @@ fn test_all_examples_assemble() {
 #[test]
 fn test_fibonacci_example() {
     let mut assembler = Assembler::new();
-    let examples = get_examples();
-    let fib = examples
-        .iter()
-        .find(|(name, _, _)| name == "Fibonacci")
-        .unwrap();
-    let result = assembler.assemble(&fib.2);
+    let result = assembler.assemble(example_source("Fibonacci"));
     assert!(
         result.errors.is_empty(),
         "Fibonacci assembly errors: {:?}",
@@ -125,12 +190,7 @@ fn test_fibonacci_example() {
 #[test]
 fn test_multiply_example() {
     let mut assembler = Assembler::new();
-    let examples = get_examples();
-    let mul = examples
-        .iter()
-        .find(|(name, _, _)| name == "Multiply")
-        .unwrap();
-    let result = assembler.assemble(&mul.2);
+    let result = assembler.assemble(example_source("Multiply"));
     assert!(
         result.errors.is_empty(),
         "Multiply assembly errors: {:?}",
@@ -175,9 +235,8 @@ fn assemble_and_run(source: &str, max_cycles: u64) -> CpuState {
 fn test_all_examples_halt() {
     // Examples that intentionally loop forever (no halt)
     let non_halting = ["Blink LED", "Button Echo", "Echo", "Loop Trace"];
-    let examples = get_examples();
-    for (name, _desc, source) in &examples {
-        if non_halting.contains(&name.as_str()) {
+    for (name, source) in examples() {
+        if non_halting.contains(&name) {
             continue;
         }
         let mut assembler = Assembler::new();
@@ -225,12 +284,7 @@ fn test_step_halted_cpu_is_noop() {
 /// Memory Access example stores to non-adjacent blocks
 #[test]
 fn test_memory_access_non_adjacent() {
-    let examples = get_examples();
-    let mem = examples
-        .iter()
-        .find(|(name, _, _)| name == "Memory Access")
-        .unwrap();
-    let cpu = assemble_and_run(&mem.2, 1000);
+    let cpu = assemble_and_run(example_source("Memory Access"), 1000);
     assert!(cpu.halted, "Memory Access should halt");
     // Check first block at 0x0100
     assert_eq!(cpu.read_byte(0x0100), 42, "Block 1: byte 0 should be 42");
@@ -249,12 +303,7 @@ fn test_memory_access_non_adjacent() {
 #[test]
 fn test_uart_hello_example() {
     let mut assembler = Assembler::new();
-    let examples = get_examples();
-    let uart = examples
-        .iter()
-        .find(|(name, _, _)| name == "UART Hello")
-        .unwrap();
-    let result = assembler.assemble(&uart.2);
+    let result = assembler.assemble(example_source("UART Hello"));
     assert!(
         result.errors.is_empty(),
         "UART Hello assembly errors: {:?}",

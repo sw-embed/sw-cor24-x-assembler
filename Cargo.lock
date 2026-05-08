@@ -33,6 +33,7 @@ name = "cor24-assembler"
 version = "0.1.0"
 dependencies = [
  "cor24-emulator",
+ "cor24-isa",
  "serde",
  "serde_json",
 ]

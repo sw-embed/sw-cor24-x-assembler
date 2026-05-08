@@ -1,72 +1,60 @@
-# Saga: cor24-asm-base-addr
+# Saga: depend-on-isa-not-emulator
 
 ## Goal
 
-Add `--base-addr <addr>` to the `cor24-asm` CLI so the binary can
-match what the deprecated `cor24-run --assemble --base-addr` did.
-This unblocks dcpls's two pass-2 reassembly callsites in
-`pr/bootstrap-toolchain` (linker tests) currently TODO'd against
-`cor24-asm`.
+Drop `cor24-emulator` from `sw-cor24-x-assembler`'s compile-time
+deps. Replace it with a direct path-dep on `cor24-isa` (the new
+small foundational crate, extracted from the emulator by dcemu's
+`pr/extract-isa`). The emulator stays as a `dev-dependency` for the
+`.lgo` round-trip tests in `src/lgo.rs` and the
+runtime-execution tests in `src/assembler.rs`.
 
-Brief: /disk1/github/softwarewrighter/devgroup/tools/briefs/dcxas-cor24-asm-base-addr.md
-Reference: `git show ba96d75` in sw-cor24-emulator (original
-`--base-addr` impl, before dcemu's removal saga deleted it).
+Brief: /disk1/github/softwarewrighter/devgroup/tools/briefs/dcxas-depend-on-isa-not-emulator.md
 
-## Library backing
+## What's actually changing
 
-Already present in `src/assembler.rs`:
-- `pub fn assemble_at(&mut self, source: &str, base_address: u32) -> AssemblyResult`
-- `AssembledLine.address` is **absolute** (base_addr + offset).
-- Five existing tests cover assemble_at semantics
-  (`test_assemble_at_*`).
+| File | Change |
+|---|---|
+| `Cargo.toml` | move `cor24-emulator` to `[dev-dependencies]`; add `cor24-isa = { path = "../sw-cor24-isa" }` to `[dependencies]` |
+| `src/lib.rs` | remove `pub use cor24_emulator;` (anti-pattern re-export) |
+| `src/assembler.rs:6-7` | swap `cor24_emulator::cpu::encode` → `cor24_isa::encode`; `cor24_emulator::cpu::instruction::Opcode` → `cor24_isa::Opcode` |
+| `src/assembler.rs` (tests) | imports at `:1154, :1225` and use at `:1180` are inside `#[test]` fns (`test_led_blink_integration`, `test_branch_loop_integration`); they use runtime types (`CpuState`, `Executor`, `ExecuteResult`) that legitimately stay in the emulator — leave as-is, they resolve via dev-deps |
+| `src/lgo.rs:45-46` | inside `#[cfg(test)] mod tests` — leave as-is |
+| `cli/Cargo.toml` | unchanged (only depends on the parent lib) |
+| `README.md` | drop mention of `sw-cor24-emulator` from the `## Dependencies` section; mention `sw-cor24-isa` instead |
 
-`src/lgo.rs::write` already takes `base_addr: u32` and emits
-`L<base+chunk_offset>...` records. Just needs the CLI to pass it
-through (currently hard-coded `0`).
+## Architectural note
 
-`src/listing.rs` writes `{:04X}` of `line.address`, which is
-already absolute — no change needed.
-
-## Design
-
-- Numeric address parser mirrors the reference impl: `0x` prefix,
-  trailing `h` suffix, or decimal. Rejects everything else with
-  exit 2.
-- CLI default: `0` (no regression vs current behavior).
-- New helper `parse_numeric_addr(s: &str) -> Option<u32>` in main.rs.
+Production users of `cor24-asm` (binary or library) only need a
+sibling clone of `sw-cor24-isa`. Test execution still requires
+`sw-cor24-emulator`. Future cleanup (out of scope) could inline a
+stub `.lgo` parser in the test crate to fully sever the dev-dep,
+but that's a separate saga.
 
 ## Steps (planned)
 
-1. **archive-and-cli-plumbing** — archive prior saga (already done
-   pre-init), init this saga, add `--base-addr` flag to
-   `cli/src/main.rs` (parser + `Cli.base_addr` field +
-   `parse_numeric_addr` helper + USAGE update), swap
-   `asm.assemble(&source)` to `asm.assemble_at(&source,
-   cli.base_addr)`, plumb `cli.base_addr` into `lgo::write` calls.
-   Smoke-test with file/stdin paths. Commit.
-2. **regression-tests** — capture a real fixture from the still-on-
-   PATH `cor24-run --assemble --base-addr 0x100 ...` for
-   byte-identical regression. Add CLI integration tests in
-   `cli/tests/cli.rs` (hex / decimal / `h` suffix accepted, invalid
-   exits 2, no flag = default 0 = unchanged output, byte-identical
-   regression). One library `.lgo` round-trip test confirming
-   non-zero base produces correct L-record addresses.
-3. **docs-and-final** — README CLI section gains `--base-addr` row;
-   `./scripts/build.sh` end-to-end green; commit; complete --done;
-   `dg-mark-pr`.
+1. **drop-emulator-dep** — Cargo.toml refactor; remove `pub use
+   cor24_emulator;` from `src/lib.rs`; switch the two non-test
+   imports in `src/assembler.rs` from `cor24_emulator::cpu::*` to
+   `cor24_isa::*`. README dependencies section update. Full
+   workspace verify (`cargo build --workspace --release && cargo
+   test --workspace && cargo clippy --workspace --all-targets
+   --all-features -- -D warnings && target/release/cor24-asm -V`).
+   Commit. complete --done. dg-mark-pr.
+
+(Single step — the change is mechanical and tightly coupled; one
+commit.)
 
 ## Out of scope
 
-- No emulator changes (`cor24-emu`).
-- No new output formats.
-- No FIXUP record emission (linker concern).
-- No removal of `Default::default()` or `Assembler::new()` (additive
-  only — library API already supports both call shapes).
+- No emulator changes (separate repo).
+- No isa repo changes (separate repo).
+- No new functionality.
+- No drop of cor24-emulator from `dev-dependencies` (round-trip
+  tests need it).
 
 ## When done
 
-`dg-mark-pr` to rename `feat/cor24-asm-base-addr` →
-`pr/cor24-asm-base-addr`. Mike relays via
-`dg-relay dcxas sw-cor24-x-assembler pr/cor24-asm-base-addr`. After
-relay + reinstall, dcpls flips the two TODO'd `cor24-run --assemble
---base-addr` callsites in their `bootstrap-toolchain` saga.
+`dg-mark-pr` to rename `feat/depend-on-isa-not-emulator` →
+`pr/depend-on-isa-not-emulator`. Mike relays via `dg-relay dcxas
+sw-cor24-x-assembler pr/depend-on-isa-not-emulator`.

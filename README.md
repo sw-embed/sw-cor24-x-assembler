@@ -6,7 +6,8 @@ Part of the [COR24 ecosystem](https://github.com/sw-embed/sw-cor24-project).
 
 ## Dependencies
 
-- [sw-cor24-emulator](https://github.com/sw-embed/sw-cor24-emulator) — ISA definitions and CPU types
+- [sw-cor24-isa](https://github.com/sw-embed/sw-cor24-isa) — ISA definitions (opcodes, encoding tables, branch constants); compile-time path-dep at `../sw-cor24-isa`.
+- [sw-cor24-emulator](https://github.com/sw-embed/sw-cor24-emulator) — runtime types (`CpuState`, `Executor`) used by the `.lgo` round-trip and execution-driven integration tests; declared as a dev-dependency at `../sw-cor24-emulator`. Production users of `cor24-asm` (binary or library) do not need this clone.
 
 ## Build
 

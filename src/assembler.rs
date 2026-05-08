@@ -3,8 +3,8 @@
 //! Parses COR24 assembly language and produces machine code.
 //! Uses encoding tables extracted from the hardware decode ROM.
 
-use cor24_emulator::cpu::encode;
-use cor24_emulator::cpu::instruction::Opcode;
+use cor24_isa::Opcode;
+use cor24_isa::encode;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
