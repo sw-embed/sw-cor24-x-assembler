@@ -1,6 +1,6 @@
 number = 3
 slug = "docs-and-final"
-status = "in-progress"
+status = "completed"
 description = """
 Last step. Update README and ship.
 
@@ -8,4 +8,5 @@ Last step. Update README and ship.
 role = "production"
 context_files = []
 created_at = "2026-05-07T20:21:09"
-commits = []
+completed_at = "2026-05-07T20:39:08"
+commits = ["c8c637911a8884df854a0134c689ed23fc45a528"]
