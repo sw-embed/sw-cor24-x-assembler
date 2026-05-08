@@ -1,8 +1,9 @@
 number = 1
 slug = "archive-and-cli-plumbing"
-status = "in-progress"
+status = "completed"
 description = "Wire the `--base-addr` flag into `cor24-asm`. Library already supports it via..."
 role = "production"
 context_files = []
 created_at = "2026-05-07T18:48:13"
-commits = []
+completed_at = "2026-05-07T18:59:38"
+commits = ["2bf9cc5e9ec43a0dfbad532e27635b4ac3f93f2c"]
