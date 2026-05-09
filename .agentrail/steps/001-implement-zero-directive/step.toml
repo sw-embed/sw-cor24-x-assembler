@@ -1,0 +1,10 @@
+number = 1
+slug = "implement-zero-directive"
+status = "in-progress"
+description = """
+Implement `.zero N` directive in `cor24-asm` per
+`dcxas-zero-fill-directive.m..."""
+role = "production"
+context_files = []
+created_at = "2026-05-09T12:42:29"
+commits = []

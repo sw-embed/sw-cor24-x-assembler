@@ -285,6 +285,20 @@ impl Assembler {
                     }
                 }
             }
+            // .zero N: emit N zero bytes at the current location counter.
+            // Source-density shorthand for `.byte 0,0,...,0`; output is
+            // byte-identical to the spelled-out form. No segment or loader
+            // semantics — flat memory model, valid in both .text and .data.
+            ".zero" => {
+                if parts.len() > 1
+                    && let Some(n) = self.parse_number(parts[1].trim_matches(','))
+                {
+                    for _ in 0..n {
+                        self.output.push(0);
+                        self.address += 1;
+                    }
+                }
+            }
             // .ascii and .asciz not supported by reference as24
             // BSS allocation: .comm symbol, size. Defines label at current
             // address and advances by size. No bytes emitted (memory is
@@ -1347,6 +1361,77 @@ halt:
         let result = asm.assemble(".byte 72\n.byte 101\n.byte 108");
         assert!(result.errors.is_empty(), "Errors: {:?}", result.errors);
         assert_eq!(result.bytes, vec![72, 101, 108]);
+    }
+
+    #[test]
+    fn test_zero_emits_n_bytes() {
+        let mut asm = Assembler::new();
+        let result = asm.assemble(".zero 5");
+        assert!(result.errors.is_empty(), "Errors: {:?}", result.errors);
+        assert_eq!(result.bytes, vec![0, 0, 0, 0, 0]);
+    }
+
+    #[test]
+    fn test_zero_large_count() {
+        let mut asm = Assembler::new();
+        let result = asm.assemble(".zero 1024");
+        assert!(result.errors.is_empty(), "Errors: {:?}", result.errors);
+        assert_eq!(result.bytes.len(), 1024);
+        assert!(result.bytes.iter().all(|&b| b == 0));
+    }
+
+    #[test]
+    fn test_zero_n_zero_is_noop() {
+        let mut asm = Assembler::new();
+        let result = asm.assemble(".zero 0");
+        assert!(result.errors.is_empty(), "Errors: {:?}", result.errors);
+        assert!(result.bytes.is_empty());
+    }
+
+    #[test]
+    fn test_zero_byte_identical_to_spelled_out() {
+        let mut a1 = Assembler::new();
+        let mut a2 = Assembler::new();
+        let r1 = a1.assemble(".zero 8");
+        let r2 = a2.assemble(".byte 0,0,0,0,0,0,0,0");
+        assert!(r1.errors.is_empty(), "r1: {:?}", r1.errors);
+        assert!(r2.errors.is_empty(), "r2: {:?}", r2.errors);
+        assert_eq!(r1.bytes, r2.bytes);
+    }
+
+    #[test]
+    fn test_zero_in_data_segment() {
+        let mut asm = Assembler::new();
+        let result = asm.assemble(".data\n.zero 4");
+        assert!(result.errors.is_empty(), "Errors: {:?}", result.errors);
+        assert_eq!(result.bytes, vec![0, 0, 0, 0]);
+    }
+
+    #[test]
+    fn test_zero_in_text_segment() {
+        // Flat memory model: .text is a no-op, so .zero works there too.
+        let mut asm = Assembler::new();
+        let result = asm.assemble(".text\n.zero 3");
+        assert!(result.errors.is_empty(), "Errors: {:?}", result.errors);
+        assert_eq!(result.bytes, vec![0, 0, 0]);
+    }
+
+    #[test]
+    fn test_zero_advances_address_for_labels() {
+        let mut asm = Assembler::new();
+        let result = asm.assemble(".byte 1,2,3\n.zero 4\nafter:\n  .byte 5");
+        assert!(result.errors.is_empty(), "Errors: {:?}", result.errors);
+        assert_eq!(result.bytes, vec![1, 2, 3, 0, 0, 0, 0, 5]);
+        assert_eq!(result.labels.get("after"), Some(&7));
+    }
+
+    #[test]
+    fn test_zero_hex_count() {
+        // .zero accepts the same numeric formats parse_number does
+        let mut asm = Assembler::new();
+        let result = asm.assemble(".zero 0x10");
+        assert!(result.errors.is_empty(), "Errors: {:?}", result.errors);
+        assert_eq!(result.bytes.len(), 16);
     }
 
     #[test]
