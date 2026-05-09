@@ -289,6 +289,47 @@ fn base_addr_byte_identical_regression() {
 }
 
 #[test]
+fn zero_directive_round_trips_through_cli() {
+    // Mixed .zero and non-zero data; verify .lgo, .bin, and --listing all
+    // see the zero-fill bytes at the right addresses and that labels resolve
+    // through the gap.
+    let dir = TempDir::new().unwrap();
+    let src = dir.path().join("zero_mix.s");
+    std::fs::write(
+        &src,
+        ".byte 1,2,3\n.zero 4\ntail:\n  .byte 9\n",
+    )
+    .unwrap();
+
+    let lgo = dir.path().join("zero_mix.lgo");
+    let bin = dir.path().join("zero_mix.bin");
+    let lst = dir.path().join("zero_mix.lst");
+
+    let out = cor24_asm()
+        .arg(&src)
+        .arg("-o").arg(&lgo)
+        .arg("--bin").arg(&bin)
+        .arg("--listing").arg(&lst)
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+
+    // .bin: byte-identical to spelled-out form
+    assert_eq!(std::fs::read(&bin).unwrap(), vec![1, 2, 3, 0, 0, 0, 0, 9]);
+
+    // .lgo: starts with L-line, encodes the same bytes
+    let lgo_content = std::fs::read_to_string(&lgo).unwrap();
+    assert!(lgo_content.starts_with('L'), "lgo: {:?}", lgo_content);
+    assert!(lgo_content.contains("01020300000000"), "lgo missing payload: {}", lgo_content);
+    assert!(lgo_content.contains("09"), "lgo missing trailing 09: {}", lgo_content);
+
+    // --listing: tail label resolves at offset 7 (3 + 4 zero bytes)
+    let listing = std::fs::read_to_string(&lst).unwrap();
+    assert!(listing.contains("tail:"), "listing missing tail label:\n{}", listing);
+    assert!(listing.contains("0007:"), "listing missing 0007: line:\n{}", listing);
+}
+
+#[test]
 fn base_addr_listing_uses_absolute_addresses() {
     let dir = TempDir::new().unwrap();
     let src = write_fixture(&dir);
