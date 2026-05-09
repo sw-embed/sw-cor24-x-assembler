@@ -4,6 +4,22 @@ COR24 assembler library — parses COR24 assembly language and produces machine 
 
 Part of the [COR24 ecosystem](https://github.com/sw-embed/sw-cor24-project).
 
+## Compatibility with reference as24
+
+This crate started as the byte-identical behavioural reference for
+the self-hosted [sw-cor24-assembler](https://github.com/sw-embed/sw-cor24-assembler)
+(`as24`). Recent additions have made `cor24-asm` a **superset**
+rather than a strict match — for example, `.zero N` is a
+convenience directive that as24 does not provide.
+
+**Long-term direction:** drop these superset extensions and
+restore strict as24 compatibility here. A more powerful assembler
+(macros, expressions, etc.) will live in
+[sw-cor24-hlasm](https://github.com/sw-embed/sw-cor24-hlasm), a
+separate project that is **not near-term**. Until hlasm lands,
+prefer the as24-compatible spelling where one exists; treat
+superset features as transitional.
+
 ## Dependencies
 
 - [sw-cor24-isa](https://github.com/sw-embed/sw-cor24-isa) — ISA definitions (opcodes, encoding tables, branch constants); compile-time path-dep at `../sw-cor24-isa`.
