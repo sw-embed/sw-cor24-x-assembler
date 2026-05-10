@@ -19,13 +19,33 @@ use std::io::{self, Write};
 
 const BYTES_PER_LINE: usize = 36;
 
+/// Selects how the writer treats `L` records whose data is entirely
+/// zero. Default is [`LgoMode::Full`], which preserves today's
+/// bit-identical output and is loadable in any environment.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum LgoMode {
+    /// Emit every `L` record, including pure-zero blocks. Loadable
+    /// in any environment that runs makerlisp's `loadngo`.
+    #[default]
+    Full,
+    /// Omit `L` records whose entire data payload is `0x00`.
+    /// Loadable in `cor24-emu` (always — fresh OS process zero) and
+    /// on FPGA cold boot (BRAM zero from bitstream config). NOT
+    /// safe on warm reload, where stale SRAM contents would survive.
+    Compact,
+}
+
 pub fn write<W: Write>(
     bytes: &[u8],
     base_addr: u32,
     entry: Option<u32>,
+    mode: LgoMode,
     w: &mut W,
 ) -> io::Result<()> {
     for (chunk_idx, chunk) in bytes.chunks(BYTES_PER_LINE).enumerate() {
+        if mode == LgoMode::Compact && chunk.iter().all(|&b| b == 0) {
+            continue;
+        }
         let addr = base_addr + (chunk_idx * BYTES_PER_LINE) as u32;
         write!(w, "L{:06X}", addr)?;
         for b in chunk {
@@ -46,8 +66,12 @@ mod tests {
     use cor24_emulator::loader::load_lgo;
 
     fn render(bytes: &[u8], base_addr: u32, entry: Option<u32>) -> String {
+        render_mode(bytes, base_addr, entry, LgoMode::Full)
+    }
+
+    fn render_mode(bytes: &[u8], base_addr: u32, entry: Option<u32>, mode: LgoMode) -> String {
         let mut buf = Vec::new();
-        write(bytes, base_addr, entry, &mut buf).unwrap();
+        write(bytes, base_addr, entry, mode, &mut buf).unwrap();
         String::from_utf8(buf).unwrap()
     }
 
@@ -136,5 +160,113 @@ mod tests {
 
         assert_eq!(result.bytes_loaded, original.len());
         assert_eq!(result.start_addr, Some(0x000093));
+    }
+
+    // --- LgoMode::Compact tests ---
+
+    #[test]
+    fn compact_skips_pure_zero_chunk() {
+        let bytes = vec![0u8; 36];
+        let out = render_mode(&bytes, 0, None, LgoMode::Compact);
+        assert_eq!(out, "");
+    }
+
+    #[test]
+    fn compact_skips_only_zero_chunks_in_mixed_input() {
+        // 3 chunks of 36 bytes: chunk 0 zero, chunk 1 non-zero, chunk 2 zero.
+        let mut bytes = vec![0u8; 36 * 3];
+        bytes[36 + 5] = 0xAB;
+        let out = render_mode(&bytes, 0, None, LgoMode::Compact);
+        let lines: Vec<&str> = out.lines().collect();
+        assert_eq!(lines.len(), 1, "expected 1 line, got: {:?}", lines);
+        assert!(lines[0].starts_with("L000024"), "addr should be 36 (0x24): {}", lines[0]);
+    }
+
+    #[test]
+    fn compact_keeps_partial_zero_chunk() {
+        // Chunk has zeros around a single non-zero byte — must still emit.
+        let mut bytes = vec![0u8; 36];
+        bytes[10] = 0x42;
+        let out = render_mode(&bytes, 0, None, LgoMode::Compact);
+        let lines: Vec<&str> = out.lines().collect();
+        assert_eq!(lines.len(), 1);
+        assert!(lines[0].starts_with("L000000"));
+        assert!(lines[0].contains("42"));
+    }
+
+    #[test]
+    fn compact_keeps_g_record_when_data_all_zero() {
+        let bytes = vec![0u8; 36];
+        let out = render_mode(&bytes, 0, Some(0x000100), LgoMode::Compact);
+        assert_eq!(out, "G000100\n");
+    }
+
+    #[test]
+    fn compact_keeps_g_record_with_mixed_data() {
+        let bytes = [0x80, 0x65];
+        let out = render_mode(&bytes, 0, Some(0x000093), LgoMode::Compact);
+        assert_eq!(out, "L0000008065\nG000093\n");
+    }
+
+    #[test]
+    fn compact_preserves_nonzero_lines_byte_identical_to_full() {
+        // Mixed fixture: [non-zero chunk, zero chunk, non-zero chunk].
+        let mut bytes = vec![0u8; 36 * 3];
+        for (i, b) in bytes.iter_mut().take(36).enumerate() {
+            *b = (i + 1) as u8;
+        }
+        for (i, b) in bytes.iter_mut().skip(72).take(36).enumerate() {
+            *b = (i + 100) as u8;
+        }
+        let full = render_mode(&bytes, 0, None, LgoMode::Full);
+        let compact = render_mode(&bytes, 0, None, LgoMode::Compact);
+        let full_nonzero: Vec<&str> = full.lines().filter(|l| !is_pure_zero_l_line(l)).collect();
+        let compact_lines: Vec<&str> = compact.lines().collect();
+        assert_eq!(full_nonzero, compact_lines);
+    }
+
+    fn is_pure_zero_l_line(line: &str) -> bool {
+        if !line.starts_with('L') || line.len() < 8 {
+            return false;
+        }
+        line[7..].chars().all(|c| c == '0')
+    }
+
+    #[test]
+    fn compact_round_trips_through_loader() {
+        // Compact-emitted .lgo loads identically into a fresh CpuState
+        // (which starts zeroed) — the omitted zero L records are
+        // implicit because the loader doesn't pre-clear and CpuState
+        // defaults to zero.
+        let mut bytes = vec![0u8; 36 * 4];
+        bytes[5] = 0x11;
+        bytes[36 + 10] = 0; // chunk 1 stays all-zero → omitted in compact
+        bytes[72] = 0xAB;
+        bytes[108 + 35] = 0xCD;
+
+        let full = render_mode(&bytes, 0, None, LgoMode::Full);
+        let compact = render_mode(&bytes, 0, None, LgoMode::Compact);
+
+        let mut cpu_full = CpuState::new();
+        let mut cpu_compact = CpuState::new();
+        load_lgo(&full, &mut cpu_full).unwrap();
+        load_lgo(&compact, &mut cpu_compact).unwrap();
+
+        for addr in 0..bytes.len() as u32 {
+            assert_eq!(
+                cpu_full.read_byte(addr),
+                cpu_compact.read_byte(addr),
+                "byte mismatch at {:06X}", addr
+            );
+        }
+    }
+
+    #[test]
+    fn full_default_unchanged_for_zero_heavy_input() {
+        // Catches accidental default flips: a zero-heavy fixture under
+        // the default mode must emit explicit zero L records.
+        let bytes = vec![0u8; 36];
+        let out = render(&bytes, 0, None);
+        assert_eq!(out, format!("L000000{}\n", "00".repeat(36)));
     }
 }
