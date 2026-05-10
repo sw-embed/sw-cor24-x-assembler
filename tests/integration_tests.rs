@@ -1,6 +1,7 @@
 //! Integration tests for COR24 assembler
 
 use cor24_assembler::Assembler;
+use cor24_assembler::lgo::{self, LgoMode};
 use cor24_emulator::cpu::executor::Executor;
 use cor24_emulator::cpu::state::CpuState;
 use cor24_emulator::loader::load_lgo;
@@ -537,6 +538,70 @@ halt:
 }
 
 /// With uart_never_ready, a polling program should hang (not halt).
+/// Brief test #6: Compact-mode .lgo and Full-mode .lgo must execute
+/// identically in cor24-emu (which has fresh-zero SRAM at process
+/// start). The semantic safety check for the compactor.
+#[test]
+fn test_lgo_full_and_compact_execute_identically() {
+    // Source with a substantial zero-fill region between two non-zero
+    // code/data sections — exercises both the omitted and preserved
+    // cases of the Compact emitter.
+    let source = "\
+        lc r0,65\n\
+        la r1,-65280\n\
+        sb r0,0(r1)\n\
+        halt:\n\
+          bra halt\n\
+        .zero 200\n\
+        .byte 0x42\n\
+    ";
+    let mut asm = Assembler::new();
+    let result = asm.assemble(source);
+    assert!(result.errors.is_empty(), "errors: {:?}", result.errors);
+
+    let mut full_buf = Vec::new();
+    let mut compact_buf = Vec::new();
+    lgo::write(&result.bytes, 0, None, LgoMode::Full, &mut full_buf).unwrap();
+    lgo::write(&result.bytes, 0, None, LgoMode::Compact, &mut compact_buf).unwrap();
+
+    // Sanity: compact must be smaller (zero-fill region drops chunks)
+    assert!(
+        compact_buf.len() < full_buf.len(),
+        "compact ({}) should be smaller than full ({})",
+        compact_buf.len(), full_buf.len()
+    );
+
+    let full = String::from_utf8(full_buf).unwrap();
+    let compact = String::from_utf8(compact_buf).unwrap();
+
+    // Load both into fresh CpuStates and run identically.
+    let run = |lgo_text: &str| -> CpuState {
+        let mut cpu = CpuState::new();
+        cpu.io.uart_tx_busy_cycles = 0;
+        load_lgo(lgo_text, &mut cpu).unwrap();
+        cpu.pc = 0;
+        let executor = Executor::new();
+        executor.run(&mut cpu, 100);
+        cpu
+    };
+
+    let cpu_full = run(&full);
+    let cpu_compact = run(&compact);
+
+    assert_eq!(
+        cpu_full.io.uart_output, cpu_compact.io.uart_output,
+        "UART output must match between Full and Compact modes"
+    );
+    // Memory at every address written by Full must equal Compact.
+    for addr in 0..(result.bytes.len() as u32) {
+        assert_eq!(
+            cpu_full.read_byte(addr),
+            cpu_compact.read_byte(addr),
+            "byte mismatch at {:06X}", addr
+        );
+    }
+}
+
 #[test]
 fn test_uart_never_ready_hangs_polling_program() {
     let source = r#"

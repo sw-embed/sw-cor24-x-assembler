@@ -289,6 +289,88 @@ fn base_addr_byte_identical_regression() {
 }
 
 #[test]
+fn lgo_full_default_matches_explicit_full() {
+    // Default behavior is --lgo-full bit-identical.
+    let dir = TempDir::new().unwrap();
+    let src = write_fixture(&dir);
+
+    let default_path = dir.path().join("default.lgo");
+    let full_path = dir.path().join("full.lgo");
+
+    cor24_asm().arg(&src).arg("-o").arg(&default_path).output().unwrap();
+    cor24_asm().arg(&src).arg("--lgo-full").arg("-o").arg(&full_path).output().unwrap();
+
+    assert_eq!(std::fs::read(&default_path).unwrap(), std::fs::read(&full_path).unwrap());
+}
+
+#[test]
+fn lgo_compact_strips_pure_zero_lines() {
+    // Source with a 64-byte zero region guaranteed to span a full
+    // BYTES_PER_LINE chunk (36 bytes) of pure zeros.
+    let dir = TempDir::new().unwrap();
+    let src = dir.path().join("zeroish.s");
+    std::fs::write(&src, ".byte 1,2,3\n.zero 64\n.byte 9\n").unwrap();
+
+    let compact_path = dir.path().join("compact.lgo");
+    let out = cor24_asm()
+        .arg(&src)
+        .arg("--lgo-compact")
+        .arg("-o").arg(&compact_path)
+        .output().unwrap();
+    assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+
+    let content = std::fs::read_to_string(&compact_path).unwrap();
+    for line in content.lines() {
+        if line.starts_with('L') {
+            let data = &line[7..];
+            assert!(
+                !data.chars().all(|c| c == '0'),
+                "compact mode must not emit pure-zero L line: {}",
+                line
+            );
+        }
+    }
+}
+
+#[test]
+fn lgo_compact_smaller_than_full_for_zero_heavy_input() {
+    let dir = TempDir::new().unwrap();
+    let src = dir.path().join("big_zero.s");
+    std::fs::write(&src, ".byte 1\n.zero 1024\n.byte 9\n").unwrap();
+
+    let full = dir.path().join("full.lgo");
+    let compact = dir.path().join("compact.lgo");
+
+    cor24_asm().arg(&src).arg("-o").arg(&full).output().unwrap();
+    cor24_asm().arg(&src).arg("--lgo-compact").arg("-o").arg(&compact).output().unwrap();
+
+    let full_size = std::fs::metadata(&full).unwrap().len();
+    let compact_size = std::fs::metadata(&compact).unwrap().len();
+    assert!(
+        compact_size < full_size,
+        "compact ({} bytes) should be smaller than full ({} bytes)",
+        compact_size, full_size
+    );
+}
+
+#[test]
+fn lgo_full_and_compact_mutex_exits_2() {
+    let dir = TempDir::new().unwrap();
+    let src = write_fixture(&dir);
+
+    for (a, b) in [("--lgo-full", "--lgo-compact"), ("--lgo-compact", "--lgo-full")] {
+        let out = cor24_asm().arg(&src).arg(a).arg(b).output().unwrap();
+        assert_eq!(out.status.code(), Some(2), "expected exit 2 for `{} {}`", a, b);
+        let stderr = String::from_utf8(out.stderr).unwrap();
+        assert!(
+            stderr.contains("--lgo-full") && stderr.contains("--lgo-compact"),
+            "stderr should mention both flag names: {:?}",
+            stderr
+        );
+    }
+}
+
+#[test]
 fn zero_directive_round_trips_through_cli() {
     // Mixed .zero and non-zero data; verify .lgo, .bin, and --listing all
     // see the zero-fill bytes at the right addresses and that labels resolve

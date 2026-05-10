@@ -1,63 +1,61 @@
-# Saga: zero-fill-directive
+# Saga: lgo-compact-flag
 
 ## Goal
 
-Add `.zero N` directive to `cor24-asm` that emits N zero bytes at the
-current location counter. Pure source-density fix: replaces the
-`.byte 0,0,...,0` enumeration that bloats SNOBOL4's `sno_main.s` to
-~261 KB (~97.7% zero-fill text). Output bytes unchanged.
+Add `--lgo-full` / `--lgo-compact` flag pair to `cor24-asm`. Default
+is `--lgo-full` (today's bit-identical behavior; hardware-safe
+everywhere). `--lgo-compact` opt-in: skip pure-zero `L` records;
+loadable in `cor24-emu` and on FPGA cold boot, not safe on warm
+reload.
 
-Brief: /disk1/github/softwarewrighter/devgroup/tools/briefs/dcxas-zero-fill-directive.md
+Brief: /disk1/github/softwarewrighter/devgroup/tools/briefs/dcxas-lgo-compact-flag.md
 
-Pairs with: `dcpls-emit-zero-fill.md` (PL/SW codegen change that
-consumes this directive). dcxas lands first; dcpls follows.
+## Why default Full
 
-## Spelling
-
-`.zero N` — matches GNU as; matches dcpls's default expectation per
-the partner brief. No spelling deviation; no extra docs needed for
-the choice.
+- Conservative — bit-identical to today's output; no caller regresses.
+- Hardware-safe by default — once FPGA arrives, full output is the
+  right thing without needing a flag.
+- Opt-in compaction is documented at the call site (build pipelines
+  that target `cor24-emu` opt in explicitly).
 
 ## What's actually changing
 
 | File | Change |
 |---|---|
-| `src/assembler.rs:222` | new arm in `handle_directive` for `.zero`; emits N zero bytes, advances address |
-| `src/assembler.rs` (tests) | unit tests: produces N zeros, `N=0` no-op, byte-identity vs `.byte 0,...,0`, works in `.data`, works in `.text` |
-| `tests/integration_tests.rs` | CLI/round-trip smoke test with mixed `.zero` and non-zero data; verify `.lgo` and `--listing` |
+| `src/lgo.rs` | add `pub enum LgoMode { Full, Compact }`; thread through `write(..., mode, ...)`; in Compact mode, skip chunks where every byte is `0x00` |
+| `cli/src/main.rs` | add `--lgo-full` and `--lgo-compact` flags (mutually exclusive); store in `Cli.lgo_mode`; pass to `lgo::write`; update `USAGE` |
+| `src/lgo.rs` (tests) | unit tests: Compact strips pure-zero chunks; Compact preserves non-zero chunks byte-identically; Compact preserves `G` record; Full default unchanged |
+| `cli/tests/cli.rs` | CLI integration: default = Full bit-identical; `--lgo-compact` strips zero lines; mutex error; non-zero L lines preserved |
+| `tests/integration_tests.rs` | round-trip: assemble fixture both modes, load each via `load_lgo`, verify CPU bytes equivalent at non-zero positions (semantic safety check from brief test #6) |
+| `README.md` | add the two flags to the CLI example block |
 
 ## Architectural note
 
-`.text`/`.data` are no-ops in this assembler's flat memory model,
-so `.zero` works in both segments without restriction. It emits
-real bytes — no `.bss` semantics, no loader change. Output `.bin`
-and `.lgo` are byte-identical to today's spelled-out form.
+Mutex check fires at parse time (both flags present → exit 2 with
+clear error mentioning both names). When neither flag is given,
+default is Full — i.e., the implicit choice matches today's behavior.
 
-Today, `.zero` falls through the catch-all `_ => {}` arm in
-`handle_directive`, so `.zero 1024` is silently a no-op. After this
-change it emits 1024 zero bytes.
+`G` records and `;` comments are unaffected — always emitted in both
+modes per the brief's format constraints.
 
 ## Out of scope (per brief)
 
-- No `.bss` / segment / loader-side machinery.
-- No expression evaluation for N (constant only is fine for v1).
-- No changes to `.byte`, `.word`, or any other existing directive.
-- No PL/SW changes (partner brief).
+- No `.lgo` format changes (no new record types, no syntax extensions).
+- No `cor24-emu` changes (already handles sparse addresses).
+- No automatic build-pipeline flip (each consuming repo decides
+  whether to pass `--lgo-compact`).
+- No changes to `bin-to-lgo.sh` in sw-cor24-snobol4.
 
 ## Steps
 
-1. **implement-zero-directive** — single step; ~20 lines of code.
-   Add the directive arm; add unit + integration tests; full
-   workspace verify (`cargo build --workspace --release && cargo
-   test --workspace && cargo clippy --workspace --all-targets
-   --all-features -- -D warnings && target/release/cor24-asm -V`).
-   Commit. complete --done. dg-mark-pr.
+1. **implement-lgo-compact-flag** — single step. Add `LgoMode`,
+   thread through emitter, CLI flag pair, mutex check, tests, README
+   update. Full workspace verify.
 
-(Single step — the change is small and tightly coupled; one commit.)
+(Single step — change is small, tightly coupled, and well-specified.)
 
 ## When done
 
-`dg-mark-pr` to rename `feat/zero-fill-directive` →
-`pr/zero-fill-directive`. Mike relays via `dg-relay dcxas
-sw-cor24-x-assembler pr/zero-fill-directive` and reinstalls
-`cor24-asm` to `work/bin/`. Then dcpls's partner saga unblocks.
+`dg-mark-pr` to rename `feat/lgo-compact-flag` → `pr/lgo-compact-flag`,
+then commit post-complete bookkeeping on a separate branch and rename
+to `pr/lgo-compact-flag-saga-complete` so mike can relay both.

@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use cor24_assembler::{Assembler, AssemblyResult, lgo, listing};
+use cor24_assembler::lgo::LgoMode;
 
 const PKG_VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -28,6 +29,13 @@ OPTIONS:
                           shift accordingly. Output bytes still start at offset
                           0 (no leading padding). Accepts 0x-prefixed hex,
                           h-suffixed hex, or decimal. Default: 0.
+    --lgo-full            Emit every L record, including pure-zero blocks.
+                          Loadable in any environment that runs the makerlisp
+                          loadngo loader. This is the DEFAULT.
+    --lgo-compact         Omit L records whose entire data payload is 00.
+                          Loadable in cor24-emu (always) and on FPGA cold boot;
+                          NOT safe on warm reload. Mutually exclusive with
+                          --lgo-full.
 
 EXIT CODES:
     0    clean assembly
@@ -78,9 +86,19 @@ enum LgoSink {
 struct Cli {
     input: Option<InputSource>,
     lgo: LgoSink,
+    /// `None` = unspecified (defaults to Full at use). `Some(_)` = user
+    /// passed `--lgo-full` or `--lgo-compact`. Tracked as Option so the
+    /// mutex check can detect "both flags passed".
+    lgo_mode: Option<LgoMode>,
     bin: Option<PathBuf>,
     listing: Option<PathBuf>,
     base_addr: u32,
+}
+
+impl Cli {
+    fn lgo_mode_or_default(&self) -> LgoMode {
+        self.lgo_mode.unwrap_or_default()
+    }
 }
 
 fn run(args: Vec<OsString>) -> Result<ExitCode, String> {
@@ -115,6 +133,22 @@ fn run(args: Vec<OsString>) -> Result<ExitCode, String> {
                     .next()
                     .ok_or_else(|| "--listing requires an argument".to_string())?;
                 cli.listing = Some(PathBuf::from(v));
+            }
+            "--lgo-full" => {
+                if matches!(cli.lgo_mode, Some(LgoMode::Compact)) {
+                    return Err(
+                        "--lgo-full and --lgo-compact are mutually exclusive".to_string(),
+                    );
+                }
+                cli.lgo_mode = Some(LgoMode::Full);
+            }
+            "--lgo-compact" => {
+                if matches!(cli.lgo_mode, Some(LgoMode::Full)) {
+                    return Err(
+                        "--lgo-full and --lgo-compact are mutually exclusive".to_string(),
+                    );
+                }
+                cli.lgo_mode = Some(LgoMode::Compact);
             }
             "--base-addr" => {
                 let v = iter
@@ -185,23 +219,24 @@ fn read_input(src: &InputSource) -> io::Result<String> {
 }
 
 fn write_outputs(input: &InputSource, cli: &Cli, result: &AssemblyResult) -> Result<(), String> {
+    let mode = cli.lgo_mode_or_default();
     match &cli.lgo {
         LgoSink::AutoFromStem => {
             let path = match input {
                 InputSource::File(p) => default_lgo_path(p),
                 InputSource::Stdin => {
                     // stdin with no -o: write .lgo to stdout (refuse TTY).
-                    return write_lgo_to_stdout(result, cli.base_addr)
+                    return write_lgo_to_stdout(result, cli.base_addr, mode)
                         .and_then(|_| write_optional_extras(cli, result));
                 }
             };
-            write_lgo_to_path(&path, result, cli.base_addr)?;
+            write_lgo_to_path(&path, result, cli.base_addr, mode)?;
         }
         LgoSink::Explicit(p) => {
             if p == Path::new("-") {
-                write_lgo_to_stdout(result, cli.base_addr)?;
+                write_lgo_to_stdout(result, cli.base_addr, mode)?;
             } else {
-                write_lgo_to_path(p, result, cli.base_addr)?;
+                write_lgo_to_path(p, result, cli.base_addr, mode)?;
             }
         }
         LgoSink::None => {}
@@ -241,17 +276,22 @@ fn default_lgo_path(input: &Path) -> PathBuf {
     p
 }
 
-fn write_lgo_to_path(path: &Path, result: &AssemblyResult, base_addr: u32) -> Result<(), String> {
+fn write_lgo_to_path(
+    path: &Path,
+    result: &AssemblyResult,
+    base_addr: u32,
+    mode: LgoMode,
+) -> Result<(), String> {
     let mut f =
         fs::File::create(path).map_err(|e| format!("creating {}: {}", path.display(), e))?;
-    lgo::write(&result.bytes, base_addr, None, &mut f)
+    lgo::write(&result.bytes, base_addr, None, mode, &mut f)
         .map_err(|e| format!("writing {}: {}", path.display(), e))
 }
 
-fn write_lgo_to_stdout(result: &AssemblyResult, base_addr: u32) -> Result<(), String> {
+fn write_lgo_to_stdout(result: &AssemblyResult, base_addr: u32, mode: LgoMode) -> Result<(), String> {
     refuse_tty("cannot write .lgo to a terminal")?;
     let mut out = io::stdout().lock();
-    lgo::write(&result.bytes, base_addr, None, &mut out)
+    lgo::write(&result.bytes, base_addr, None, mode, &mut out)
         .map_err(|e| format!("writing .lgo to stdout: {}", e))
 }
 

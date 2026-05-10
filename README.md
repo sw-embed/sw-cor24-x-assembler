@@ -45,6 +45,7 @@ cor24-asm prog.s -o out.lgo                            # explicit .lgo output
 cor24-asm prog.s --bin out.bin                         # raw machine code
 cor24-asm prog.s -o out.lgo --bin out.bin --listing out.lst   # all three
 cor24-asm prog.s --base-addr 0x1000 -o out.lgo         # assemble at non-zero base
+cor24-asm prog.s --lgo-compact -o out.lgo              # omit pure-zero L records (cor24-emu / cold-boot only)
 cor24-asm -                                            # stdin → stdout (.lgo)
 cor24-asm -V | --version                               # version
 cor24-asm -h | --help                                  # usage
@@ -55,6 +56,13 @@ into label resolution (so `la r0, foo` resolves to `base + offset_of(foo)`).
 Output bytes still start at offset 0; only addresses (labels, `.lgo`
 L-records, `.lst` columns) move. Accepts `0x...` hex, `...h` hex, or
 decimal. Default 0.
+
+`--lgo-full` (default) emits every `L` record, including pure-zero
+blocks — loadable in any environment. `--lgo-compact` omits `L`
+records whose data payload is entirely `0x00`; the resulting `.lgo`
+loads correctly in `cor24-emu` (always — fresh OS-zeroed memory) and
+on FPGA cold boot, but is **not safe on warm reload** where stale
+SRAM contents would survive. The two flags are mutually exclusive.
 
 Exit codes: `0` clean assembly, `1` assembly errors (one per line on
 stderr), `2` usage / IO errors. When writing `.lgo` or `.bin` to
