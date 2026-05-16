@@ -40,6 +40,10 @@ fn examples() -> Vec<(&'static str, &'static str)> {
             include_str!("../src/examples/assembler/fibonacci.s"),
         ),
         (
+            "I2C Add1 Ping",
+            include_str!("../src/examples/assembler/i2c_add1_ping.s"),
+        ),
+        (
             "Literals",
             include_str!("../src/examples/assembler/literals.s"),
         ),

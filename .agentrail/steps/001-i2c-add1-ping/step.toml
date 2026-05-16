@@ -1,0 +1,10 @@
+number = 1
+slug = "i2c-add1-ping"
+status = "in-progress"
+description = """
+Write `src/examples/assembler/i2c_add1_ping.s`: a minimal bit-bang
+i2c demo t..."""
+role = "production"
+context_files = []
+created_at = "2026-05-15T19:12:22"
+commits = []
