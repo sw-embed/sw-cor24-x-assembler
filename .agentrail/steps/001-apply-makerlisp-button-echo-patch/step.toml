@@ -1,0 +1,11 @@
+number = 1
+slug = "apply-makerlisp-button-echo-patch"
+status = "completed"
+description = """
+Apply dwxas's format-patch for `button_echo_makerlisp.s` and ship
+through the..."""
+role = "production"
+context_files = []
+created_at = "2026-05-15T18:09:16"
+completed_at = "2026-05-15T18:10:43"
+commits = ["5d2a4f4e10491ccd93c533df404a12d48f2a2a77"]
