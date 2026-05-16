@@ -44,7 +44,7 @@ fn examples() -> Vec<(&'static str, &'static str)> {
             include_str!("../src/examples/assembler/i2c_add1_ping.s"),
         ),
         (
-            "I2C DS1307 Read",
+            "I2C RTC Read",
             include_str!("../src/examples/assembler/i2c_ds1307_read.s"),
         ),
         (
