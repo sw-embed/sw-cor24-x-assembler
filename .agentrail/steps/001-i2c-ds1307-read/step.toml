@@ -1,0 +1,10 @@
+number = 1
+slug = "i2c-ds1307-read"
+status = "in-progress"
+description = """
+Write `src/examples/assembler/i2c_ds1307_read.s`: bit-bang i2c
+master that re..."""
+role = "production"
+context_files = []
+created_at = "2026-05-16T14:15:45"
+commits = []
