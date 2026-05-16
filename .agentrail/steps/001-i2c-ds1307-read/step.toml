@@ -1,10 +1,11 @@
 number = 1
 slug = "i2c-ds1307-read"
-status = "in-progress"
+status = "completed"
 description = """
 Write `src/examples/assembler/i2c_ds1307_read.s`: bit-bang i2c
 master that re..."""
 role = "production"
 context_files = []
 created_at = "2026-05-16T14:15:45"
-commits = []
+completed_at = "2026-05-16T14:19:42"
+commits = ["0864502b752d46b01015c9df007a1bfc44d71b05"]
