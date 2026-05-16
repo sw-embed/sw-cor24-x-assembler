@@ -23,6 +23,10 @@ fn examples() -> Vec<(&'static str, &'static str)> {
             include_str!("../src/examples/assembler/button_echo.s"),
         ),
         (
+            "Button Echo (MakerLisp)",
+            include_str!("../src/examples/assembler/button_echo_makerlisp.s"),
+        ),
+        (
             "Comments",
             include_str!("../src/examples/assembler/comments.s"),
         ),
@@ -235,7 +239,13 @@ fn assemble_and_run(source: &str, max_cycles: u64) -> CpuState {
 #[test]
 fn test_all_examples_halt() {
     // Examples that intentionally loop forever (no halt)
-    let non_halting = ["Blink LED", "Button Echo", "Echo", "Loop Trace"];
+    let non_halting = [
+        "Blink LED",
+        "Button Echo",
+        "Button Echo (MakerLisp)",
+        "Echo",
+        "Loop Trace",
+    ];
     for (name, source) in examples() {
         if non_halting.contains(&name) {
             continue;
