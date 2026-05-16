@@ -1,88 +1,102 @@
-# Saga: i2c-examples
+# Saga: i2c-ds1307-read
 
 ## Goal
 
-Add two i2c assembler examples to `src/examples/assembler/` for
-the web live demo (and `cor24-emu --i2c-device` users) to pick up
-via the existing auto-discovery in `tests/integration_tests.rs::
-examples()`.
+Add `src/examples/assembler/i2c_ds1307_read.s` — a bit-bang i2c
+demo that reads the current time from the emulator's DS1307
+real-time-clock device at address `0x68`, formats it as
+`HH:MM:SS\n`, and prints to UART. Halts.
 
-- `i2c_add1_ping.s` — minimal round-trip via the `add1` test slave.
-  Write byte, read it back (slave returns `byte + 1`), print result
-  to UART as two hex chars. Best teaching example for the i2c
-  protocol shape.
-- `i2c_tmp101_read.s` — practical: setup TMP101 to 10-bit
-  resolution, one temperature read, print formatted "DD.DD\n". Pairs
-  with the web demo's planned TMP101 panel (step 6 of
-  web-sw-cor24-x-assembler's saga).
-
-Briefs / references:
-- Emulator i2c reference: `sw-cor24-emulator/examples/i2c/tmp101/libi2c.c`
-- Emulator i2c bus + devices: `sw-cor24-emulator/src/cpu/i2c_bus.rs`,
-  `sw-cor24-emulator/src/peripherals/i2c/devices/{add1,tmp101}.rs`
-- Web demo plan steps 5-6: `web-sw-cor24-x-assembler/.agentrail/plan.md`
-
-## Why two steps, not one
-
-Each example is a substantial chunk of assembly (~150-200 lines
-with inlined i2c subroutines, since this assembler has no
-`.include` / macros). Committing per example means if tmp101 turns
-out tricky, add1 work is already safely landed.
-
-## I2C MMIO contract (per `i2cio.h`)
-
-- `0xFF0020` — SCL (clock line), bit 0 significant, open-drain
-- `0xFF0021` — SDA (data line), bit 0 significant, open-drain
-- Default device addresses: `add1` at `0x50`, `tmp101` at `0x4A`
+This is the assembler-side piece of the RTC live demo. Pairs with
+dwxas's planned web `i2c-rtc-panel` (their future saga step) which
+will provide a UI to set the time; the .s example will read what
+the panel sets and the web demo will show the round-trip.
 
 ## What's actually changing
 
 | File | Change |
 |---|---|
-| `src/examples/assembler/i2c_add1_ping.s` (new) | minimal bit-bang demo against add1 slave |
-| `src/examples/assembler/i2c_tmp101_read.s` (new) | TMP101 setup + one-read + formatted print |
-| `tests/integration_tests.rs` (2 hunks) | register both in `examples()`; let `test_all_examples_halt` cover them (both halt after one op even with no device attached) |
+| `src/examples/assembler/i2c_ds1307_read.s` (new) | bit-bang demo: write pointer=0, read 3 bytes (S/M/H), format BCD → ASCII, print "HH:MM:SS\n" |
+| `tests/integration_tests.rs` (2 hunks) | register `("I2C DS1307 Read", ...)` in `examples()` between "I2C Add1 Ping" and "Literals" |
 
-No new directives needed. No public-API change. No `Cargo.toml`
-change.
+No public-API change. No `Cargo.toml` change. No emulator changes.
+
+## DS1307 protocol shape (per emulator docs in
+## `sw-cor24-emulator/src/peripherals/i2c/devices/ds1307.rs`)
+
+- 7-bit i2c addr `0x68` → master write byte `0xD0`, read byte `0xD1`.
+- 8 BCD registers behind an auto-incrementing pointer:
+    - `0x00` Seconds — high nibble = tens, low = ones; **bit 7 = CH**
+      (Clock Halt) — mask on read with `0x7F`.
+    - `0x01` Minutes — BCD; valid 0–59.
+    - `0x02` Hours — BCD 24-hour; **bit 6 = 12/24 mode** (this device
+      stores 24-hour) — mask with `0x3F`.
+    - `0x03`–`0x06` — DoW / Date / Month / Year (not used by this demo).
+    - `0x07` Control (not used by this demo).
+- To read time: i2cstart → write 0xD0 → write 0x00 (pointer) → restart
+  → write 0xD1 → read N bytes (pointer auto-increments per read) →
+  i2cstop. After reading 3 bytes the pointer sits at `0x03`.
 
 ## Architectural note
 
-Each `.s` inlines its own copy of i2c subroutines (i2cstart,
-i2cstop, i2cwrite, i2cread, plus hclkdlay/qclkdlay/clkhiw helpers)
-because this assembler has no include/macro mechanism. Future work:
-a shared `i2c_lib.s` once the assembler gains `.include` or the
-build pipeline gains a concat step. Out of scope here.
+Inlines its own copy of the bit-bang i2c primitives (i2cstart /
+i2cstop / i2cwrite / i2cread), same shape as `i2c_add1_ping.s`,
+because this assembler has no `.include` or macro mechanism. The
+two examples could be refactored into a shared `i2c_lib.s` once
+that gain lands (future saga).
 
-Both examples halt after one operation rather than looping
-forever — this keeps the existing `test_all_examples_halt` test
-happy without per-example device wiring. Looping daemon variants
-can be a future saga.
+For BCD → ASCII conversion the existing `print_hex_nibble` helper
+already does the right thing for 0–9 values (`+'0'` path); A–F
+path is dead code for BCD inputs. Reusing it keeps the file small.
 
-Without an i2c device attached, SDA reads return 1 (open-drain
-default), so the programs run to completion but print "garbage"
-data (e.g. add1 reports 0xFF, tmp101 reads zero temperature). Real
-verification: `cor24-emu --lgo <out> --i2c-device add1@0x50` or
-`tmp101@0x4A?temp=25.0`.
+Bit 7 of seconds (CH) and bit 6 of hours (12/24 mode) are masked
+before BCD conversion so the output is correct even if the device
+happens to set those bits in some configuration.
 
 ## Out of scope
 
+- No DoW / date / month / year readout (just HH:MM:SS for v1).
 - No shared `i2c_lib.s` — each example self-contained.
-- No looping daemon variants.
-- No web-side panel work (separate web saga steps 5-6).
-- No new assembler directives or features.
-- No changes to `button_echo.s` / other examples.
-- No emulator changes.
+- No looping daemon variant (halts after one read).
+- No `cor24-emulator` changes — the DS1307 device is already
+  shipped at origin/main (8d12b75) / origin/dev (0eed0e1).
+- No web `i2c-rtc-panel` changes — separate dwxas saga.
+
+## Verification
+
+```bash
+cargo build --workspace --release
+target/release/cor24-asm src/examples/assembler/i2c_ds1307_read.s -o /tmp/ds.lgo
+$EMU --lgo /tmp/ds.lgo --i2c-device ds1307@0x68 --quiet --time 5
+# expect output like "00:00:00\n" (DS1307 defaults to all-zero
+# registers per the registry's no-params spec)
+```
+
+(Setting a non-zero time requires either the web panel's
+`Ds1307HandleExt::set_time(...)` API or a future `--i2c-device
+ds1307@0x68?hour=12&minute=34&second=56`-style param. The current
+CLI registry accepts no params, so the demo will read 00:00:00 in
+isolation — that's fine for assembler-side verification.)
+
+Without an i2c device attached, the read returns 0xFF for each
+byte, so the BCD-decode produces garbage (e.g. `FF:FF:FF\n` once
+masking strips bit 6/7 → masked values still > 9 so the digits
+fall through `print_hex_nibble`'s A-F path). Documented in the
+file header.
 
 ## Steps
 
-1. **i2c-add1-ping** — write `i2c_add1_ping.s`. Verify byte-bang
-   round-trip via `cor24-emu --i2c-device add1@0x50` produces
-   expected output. Register in `examples()`. Commit.
-2. **i2c-tmp101-read** — write `i2c_tmp101_read.s`. Verify via
-   `cor24-emu --i2c-device tmp101@0x4A?temp=25.0` produces
-   "25.00\n". Register in `examples()`. Commit.
+1. **i2c-ds1307-read** — single step. Write the .s file, register
+   in tests, verify via cor24-emu, commit. Then `dg-mark-pr` →
+   `pr/i2c-ds1307-read` and the standard post-complete bookkeeping
+   branch.
 
-After step 2: `agentrail complete --done`, `dg-mark-pr` →
-`pr/i2c-examples`, then post-complete bookkeeping branch →
-`pr/i2c-examples-saga-complete`.
+## When done
+
+Two pr/ branches per the established pattern:
+- `pr/i2c-ds1307-read` — the work
+- `pr/i2c-ds1307-read-saga-complete` — bookkeeping
+
+dwxas's web `i2c-rtc-panel` brief (when written) will consume this
+`.s` file via `include_str!` and pair it with a panel UI that sets
+the DS1307 registers in real time.
