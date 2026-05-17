@@ -1,6 +1,6 @@
-name = "i2c-ds1307-set"
-status = "completed"
+name = "i2c-ssd1306-demos"
+status = "active"
 current_step = 1
-created_at = "2026-05-16T15:13:36"
+created_at = "2026-05-17T08:20:28"
 plan_file = ".agentrail/plan.md"
 retroactive = false
