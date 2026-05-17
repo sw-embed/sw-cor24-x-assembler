@@ -1,102 +1,57 @@
-# Saga: i2c-ds1307-read
+# Saga: i2c-ds1307-set (rebuild)
 
 ## Goal
 
-Add `src/examples/assembler/i2c_ds1307_read.s` — a bit-bang i2c
-demo that reads the current time from the emulator's DS1307
-real-time-clock device at address `0x68`, formats it as
-`HH:MM:SS\n`, and prints to UART. Halts.
+Add `src/examples/assembler/i2c_ds1307_set.s` — interactive UART-
+driven DS1307 RTC time-set demo. Same content as the previous
+attempt; this saga rebuilds the branch chain off current `dev`
+(which already has `i2c-ds1307-read` merged) per
+`dcxas-finish-ds1307-set-and-document-cli-preset.md` Part 1.
 
-This is the assembler-side piece of the RTC live demo. Pairs with
-dwxas's planned web `i2c-rtc-panel` (their future saga step) which
-will provide a UI to set the time; the .s example will read what
-the panel sets and the web demo will show the round-trip.
+The original `pr/i2c-ds1307-set` and `pr/i2c-ds1307-set-saga-complete`
+had a rename/rename conflict against dev: both branches archived
+`i2c-examples` to different timestamped directories (T141431 from
+read vs T142625 from set), plus a `tests/integration_tests.rs`
+content conflict because both inserted "I2C RTC X" at the same
+alphabetical slot. Rebuild resolves both by archiving the
+NOW-active saga on dev (`i2c-ds1307-read`) instead of redundantly
+re-archiving `i2c-examples`, and by inserting "I2C RTC Set"
+after the already-merged "I2C RTC Read".
 
 ## What's actually changing
 
+Same as the prior attempt:
+
 | File | Change |
 |---|---|
-| `src/examples/assembler/i2c_ds1307_read.s` (new) | bit-bang demo: write pointer=0, read 3 bytes (S/M/H), format BCD → ASCII, print "HH:MM:SS\n" |
-| `tests/integration_tests.rs` (2 hunks) | register `("I2C DS1307 Read", ...)` in `examples()` between "I2C Add1 Ping" and "Literals" |
+| `src/examples/assembler/i2c_ds1307_set.s` (new) | UART RX → 6-digit ASCII parse → BCD → i2c-write registers 0-2 → i2c-read back → print "HH:MM:SS\n". Identical to the file we already verified works (saved to /tmp/i2c_ds1307_set.s before deleting the stale pr/ branches). |
+| `tests/integration_tests.rs` (2 hunks) | register `("I2C RTC Set", ...)` alphabetically AFTER `"I2C RTC Read"` (now merged); add `"I2C RTC Set"` to `non_halting` in `test_all_examples_halt`. Display name uses RTC (device class) not DS1307 (chip) from the start — no follow-up rename commit needed. |
 
-No public-API change. No `Cargo.toml` change. No emulator changes.
+## Saga-complete supersets-feat discipline (Part 2)
 
-## DS1307 protocol shape (per emulator docs in
-## `sw-cor24-emulator/src/peripherals/i2c/devices/ds1307.rs`)
-
-- 7-bit i2c addr `0x68` → master write byte `0xD0`, read byte `0xD1`.
-- 8 BCD registers behind an auto-incrementing pointer:
-    - `0x00` Seconds — high nibble = tens, low = ones; **bit 7 = CH**
-      (Clock Halt) — mask on read with `0x7F`.
-    - `0x01` Minutes — BCD; valid 0–59.
-    - `0x02` Hours — BCD 24-hour; **bit 6 = 12/24 mode** (this device
-      stores 24-hour) — mask with `0x3F`.
-    - `0x03`–`0x06` — DoW / Date / Month / Year (not used by this demo).
-    - `0x07` Control (not used by this demo).
-- To read time: i2cstart → write 0xD0 → write 0x00 (pointer) → restart
-  → write 0xD1 → read N bytes (pointer auto-increments per read) →
-  i2cstop. After reading 3 bytes the pointer sits at `0x03`.
-
-## Architectural note
-
-Inlines its own copy of the bit-bang i2c primitives (i2cstart /
-i2cstop / i2cwrite / i2cread), same shape as `i2c_add1_ping.s`,
-because this assembler has no `.include` or macro mechanism. The
-two examples could be refactored into a shared `i2c_lib.s` once
-that gain lands (future saga).
-
-For BCD → ASCII conversion the existing `print_hex_nibble` helper
-already does the right thing for 0–9 values (`+'0'` path); A–F
-path is dead code for BCD inputs. Reusing it keeps the file small.
-
-Bit 7 of seconds (CH) and bit 6 of hours (12/24 mode) are masked
-before BCD conversion so the output is correct even if the device
-happens to set those bits in some configuration.
+The work commit will use the final "I2C RTC Set" label from the
+start. No follow-up "rename label" commit. `pr/i2c-ds1307-set-
+saga-complete` will branch off `pr/i2c-ds1307-set` AFTER `dg-mark-
+pr`, so it's a strict superset (= feat + 1 bookkeeping commit).
+Restores the earlier discipline per mike's brief Part 2.
 
 ## Out of scope
 
-- No DoW / date / month / year readout (just HH:MM:SS for v1).
-- No shared `i2c_lib.s` — each example self-contained.
-- No looping daemon variant (halts after one read).
-- No `cor24-emulator` changes — the DS1307 device is already
-  shipped at origin/main (8d12b75) / origin/dev (0eed0e1).
-- No web `i2c-rtc-panel` changes — separate dwxas saga.
-
-## Verification
-
-```bash
-cargo build --workspace --release
-target/release/cor24-asm src/examples/assembler/i2c_ds1307_read.s -o /tmp/ds.lgo
-$EMU --lgo /tmp/ds.lgo --i2c-device ds1307@0x68 --quiet --time 5
-# expect output like "00:00:00\n" (DS1307 defaults to all-zero
-# registers per the registry's no-params spec)
-```
-
-(Setting a non-zero time requires either the web panel's
-`Ds1307HandleExt::set_time(...)` API or a future `--i2c-device
-ds1307@0x68?hour=12&minute=34&second=56`-style param. The current
-CLI registry accepts no params, so the demo will read 00:00:00 in
-isolation — that's fine for assembler-side verification.)
-
-Without an i2c device attached, the read returns 0xFF for each
-byte, so the BCD-decode produces garbage (e.g. `FF:FF:FF\n` once
-masking strips bit 6/7 → masked values still > 9 so the digits
-fall through `print_hex_nibble`'s A-F path). Documented in the
-file header.
+- No new RTC demo .s files beyond the existing two.
+- No emulator changes (waits on dcemu's parallel work).
+- No demo header updates for `?preset=system` (Part 3 of mike's
+  brief — waits on dcemu to ship).
+- No "battery" naming.
 
 ## Steps
 
-1. **i2c-ds1307-read** — single step. Write the .s file, register
-   in tests, verify via cor24-emu, commit. Then `dg-mark-pr` →
-   `pr/i2c-ds1307-read` and the standard post-complete bookkeeping
-   branch.
+1. **i2c-ds1307-set** — single step. Restore the .s, register in
+   tests, verify end-to-end with the same three test inputs that
+   passed last time (12:34:56, 09:30:00, 23:59:59), commit.
 
 ## When done
 
-Two pr/ branches per the established pattern:
-- `pr/i2c-ds1307-read` — the work
-- `pr/i2c-ds1307-read-saga-complete` — bookkeeping
-
-dwxas's web `i2c-rtc-panel` brief (when written) will consume this
-`.s` file via `include_str!` and pair it with a panel UI that sets
-the DS1307 registers in real time.
+`dg-mark-pr` → `pr/i2c-ds1307-set`. Then `feat/i2c-ds1307-set-
+saga-complete` off `pr/i2c-ds1307-set`, commit bookkeeping,
+`dg-mark-pr` → `pr/i2c-ds1307-set-saga-complete`. Both branches
+relay cleanly without rebase next time per Part 2 discipline.
