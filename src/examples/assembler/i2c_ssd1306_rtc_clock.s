@@ -151,9 +151,9 @@ main_loop:
 .rl_rrm:
         push    r0              ; M at sp+0; S at sp+3
         la      r1, .rl_rrh
-        la      r2, i2cread
-        jal     r1, (r2)
-.rl_rrh:
+        la      r2, i2cread_last ; skip the 9th clock — i2cstop's SCL-up
+        jal     r1, (r2)         ; doubles as the ACK clock so its SDA-up
+.rl_rrh:                         ; fires a real STOP (see i2cread_last doc)
         push    r0              ; H at sp+0; M at sp+3; S at sp+6
         la      r1, .rl_rsp
         la      r2, i2cstop
@@ -511,6 +511,61 @@ i2cread:
         lc      r0, 0
         sb      r0, 0(r1)
         pop     r0
+        pop     fp
+        pop     r1
+        jmp     (r1)
+
+; ============================================================================
+; i2cread_last: read 8 bits and return WITHOUT emitting the 9th (ACK/NAK)
+; clock. Use this for the LAST byte of a multi-byte read sequence; the
+; caller must immediately follow with i2cstop, whose own SCL-up doubles as
+; the ACK clock (SDA=0 from i2cstop step 1 → device sees ACK) and the
+; subsequent SDA-up fires a real STOP condition.
+;
+; Why this is needed: after the byte's 8th SCL fall, the bus state machine
+; is in AckSlaveToMaster phase and slave_sda_pull = false (the fall in that
+; phase resets the slave pull). If we then issued a normal master-NAK
+; clock, the bus would transition to TxByte{0,0} on the rise, then on the
+; following fall recompute slave_sda_pull = (tx_byte MSB == 0) = true
+; (tx_byte was shifted to zero during the byte's 8 bits and never refilled
+; because master NAKed). With slave pulling SDA low, the wired-AND
+; suppresses i2cstop's SDA-up and STOP is never detected — the master
+; ends up clocking ghost bytes out of the slave indefinitely. By skipping
+; the explicit 9th clock and letting i2cstop's SCL-up act as the ACK
+; clock, slave_sda_pull stays false (no intermediate SCL fall in TxByte)
+; and the STOP edge fires cleanly. The slave does see a spurious ACK and
+; advances its pointer once, but that's harmless because next iteration
+; resets the pointer with a fresh START + addr-write + 0x00.
+; ============================================================================
+
+i2cread_last:
+        push    r1
+        push    fp
+        lc      r0, 0
+        push    r0              ; acc at 0(fp)
+        mov     fp, sp
+        lcu     r2, 8           ; counter
+.irl_loop:
+        la      r1, -65504
+        lcu     r0, 1
+        sb      r0, 1(r1)       ; SDA = 1 (release for slave)
+        sb      r0, 0(r1)       ; SCL = 1 (slave puts bit on line)
+        lbu     r0, 1(r1)       ; r0 = bit
+        push    r0              ; save bit
+        lw      r0, 0(fp)       ; current acc
+        add     r0, r0          ; shift left
+        pop     r1              ; bit into r1
+        or      r0, r1
+        sw      r0, 0(fp)       ; updated acc
+        la      r1, -65504
+        lc      r0, 0
+        sb      r0, 0(r1)       ; SCL = 0
+        add     r2, -1
+        ceq     r2, z
+        brf     .irl_loop
+        ; No 9th-clock here — caller's i2cstop combines ACK and STOP.
+        ; State at return: scl=0, slave_pull=false, phase=AckSlaveToMaster.
+        pop     r0              ; acc = return value
         pop     fp
         pop     r1
         jmp     (r1)

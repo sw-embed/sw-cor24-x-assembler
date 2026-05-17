@@ -1,115 +1,80 @@
-# Saga: i2c-ssd1306-demos
+# Saga: fix-i2c-ssd1306-rtc-clock-read
 
 ## Goal
 
-Add two SSD1306 OLED display demos to `src/examples/assembler/`:
+Fix `i2c_ssd1306_rtc_clock.s` so the DS1307 read sequence ends
+with a clean STOP. Per dwxas's brief
+`dcxas-fix-i2c-ssd1306-rtc-clock-read.md`.
 
-- **`i2c_ssd1306_hello.s`** — minimal "init then write HELLO"
-  text-rendering demo. Halts after one frame.
-- **`i2c_ssd1306_rtc_clock.s`** — combines DS1307 read + SSD1306
-  draw to render `HH:MM:SS` continuously, redrawn periodically.
-  Loops forever (`non_halting`).
+## Root cause
 
-Per mike's brief `dcxas-i2c-ssd1306-demos.md`.
+The emulator's i2c bus state machine
+(`sw-cor24-emulator/src/cpu/i2c_bus.rs:149`) detects STOP only
+when SDA rises **on the effective line** while SCL is high. The
+effective SDA is `master_sda && !slave_sda_pull` (open-drain
+wired-AND).
 
-## Cross-repo position
+After the 3rd `i2cread`, master-ACK leaves the slave in "OK,
+prepare next byte" state, with `slave_sda_pull = true` (slave is
+about to drive bit 7 of the next byte). My `i2cstop`'s SDA-up
+write becomes `eff_sda = 1 && !true = 0` — no SDA rising edge,
+so STOP never registers. The bus stays in the read transaction
+forever, the slave keeps streaming bytes (auto-incrementing
+pointer wraps through registers and into RAM), and my
+`main_loop` body lands subsequent i2c traffic on a stale state
+machine.
 
-Middle of the three-agent SSD1306 thread:
-
-- Upstream (shipped): `dcemu-i2c-ssd1306-device.md` — emulator
-  `Ssd1306Device` now on origin/main (897fb29) / origin/dev
-  (835d9b6). Sibling clone refreshed and verified.
-- Downstream (waiting on us): `dwxas-i2c-ssd1306-panel.md` —
-  web panel + dropdown entries `I2C OLED Hello` / `I2C OLED RTC
-  Clock`.
+Standard i2c protocol fix: **NAK the last byte** of a multi-byte
+read instead of ACKing. NAK = master releases SDA (drives high)
+on the 9th clock pulse. Slave sees NAK and releases SDA
+(`slave_sda_pull = false`). Then `i2cstop`'s SDA-up write
+actually rises the effective line → STOP detected.
 
 ## What's actually changing
 
 | File | Change |
 |---|---|
-| `src/examples/assembler/i2c_ssd1306_hello.s` (new) | init sequence + write 25 bytes of "HELLO" font data + halt |
-| `src/examples/assembler/i2c_ssd1306_rtc_clock.s` (new) | combined DS1307 read + SSD1306 draw loop; HH:MM:SS redrawn periodically |
-| `tests/integration_tests.rs` (2 hunks) | register `("I2C OLED Hello", ...)` and `("I2C OLED RTC Clock", ...)` between `I2C Add1 Ping` and `I2C RTC Read`; add `"I2C OLED RTC Clock"` to `non_halting` |
+| `src/examples/assembler/i2c_ssd1306_rtc_clock.s` | add `i2creadnak` subroutine (variant of `i2cread` with master-NAK at end); change the 3rd read call in `main_loop` (for H) to use it |
 
-No public-API changes, no Cargo.toml changes.
+No changes to:
+- The existing `i2cread` primitive (used in `i2c_ds1307_read.s`
+  which still works for its halt-after-print use case).
+- `i2c_ssd1306_hello.s` (no `i2cread` use).
+- The emulator (the bus state machine is correct; my driver was
+  violating protocol).
+- Test infrastructure or any other example.
 
-## SSD1306 contract recap (per emulator's `ssd1306.rs`)
+## Why not also fix i2c_ds1307_read.s?
 
-- 7-bit addr `0x3C` default → master write byte `0x78`.
-- Control byte after START+address: `0x00` = command stream;
-  `0x40` = data stream. Rest of transaction stays in that mode
-  until STOP. (`Co=1` variants exist but standard drivers don't
-  use them.)
-- Commands modeled semantically: `0xAE` off / `0xAF` on, `0x20
-  mode` (0=horiz/1=vert/2=page), `0x21 col_start col_end`, `0x22
-  page_start page_end`, `0xB0..0xB7` page pointer, `0x00..0x0F`
-  col-low nibble, `0x10..0x1F` col-high nibble. Other init-
-  sequence opcodes (contrast, clock divide, multiplex, COM pins,
-  charge pump) are lenient-consumed: param count honored, no
-  state effect. Lets us skip the full real-driver init.
-- GDDRAM layout: `framebuffer[page * 128 + col]` = 8 vertical
-  pixels of that column, **LSB at top**. Font bytes flow directly.
-- Default reset: framebuffer zero, display off, addressing mode
-  Page, pointer (0, 0).
+Mike's brief explicitly out-of-scopes shared primitives and asks
+not to introduce regressions. The read demo halts immediately
+after `i2cstop`, so the bus's stuck state has no visible
+consequence — UART output is correct because the bytes were
+correctly read before the bad-STOP. Worth a future cleanup
+(it's still wrong i2c protocol) but not blocking.
 
-Minimal init sufficient for the lenient device:
-- `0xAE` (display off — clean start)
-- `0x20, 0x00` (horizontal addressing — pointer auto-increments
-  through col range, wraps to next page)
-- `0x21, 0, 127` (col range)
-- `0x22, 0, 7` (page range)
-- `0xB0` (page = 0)
-- `0x00` (col-low = 0)
-- `0x10` (col-high = 0)
-- `0xAF` (display on)
+## Acceptance (per brief)
 
-## Architectural notes
-
-- Each demo inlines its own i2c bit-bang primitives (`i2cstart` /
-  `i2cstop` / `i2cwrite`) copied verbatim from the DS1307 demos.
-  `i2cread` only needed in the clock demo. No `.include` in this
-  assembler.
-- Font tables inlined per demo per brief recommendation (extract
-  to `lib/font5x8.s` when a 3rd demo arrives).
-  - Hello demo: H, E, L, O = 4 glyphs × 5 bytes = 20 bytes.
-  - Clock demo: 0-9, ':' = 11 glyphs × 5 bytes = 55 bytes.
-- Glyph encoding: 5 bytes per char, each byte = one column, LSB
-  at top, MSB unused for the 5×7 effective glyph in an 8-tall
-  page. Bytes flow byte-for-byte to GDDRAM.
-- Hello demo: single i2c-data-stream write of 25 bytes (5 chars
-  × 5 cols). Horizontal addressing auto-advances column.
-- Clock demo:
-  - Init once.
-  - Loop: read DS1307 (H/M/S registers), reposition pointer to
-    (0, 0), write 8 BCD-derived glyphs ("HH:MM:SS" = 2 digits +
-    colon + 2 digits + colon + 2 digits) = 8 × 5 = 40 bytes,
-    spin a delay loop, repeat.
-  - Delay between updates: pick a value that's responsive in
-    web at 100k IPS budget. ~10k spin iterations between reads
-    feels right (~100ms at 100k IPS). Tune empirically.
-
-## Out of scope
-
-- No shared `lib/font5x8.s` file (brief recommends inline for 2
-  demos; extract when 3rd arrives).
-- No scrolling, animation, multi-line, multi-font.
-- No SSD1306 driver crate or library abstraction.
-- No `src/` library or CLI changes.
-- No web panel work (dwxas's downstream saga).
+- `--dump-i2c` shows exactly **3 RD entries and one STOP** per
+  main_loop iteration.
+- OLED matches DS1307 register values for any input
+  (`?hour=...&minute=...&second=...` or `?preset=system`).
+- `i2c_ssd1306_hello.s` and `i2c_ds1307_read.s` still pass
+  (no regressions).
+- `cargo test` green.
 
 ## Steps
 
-1. **i2c-ssd1306-hello** — write `i2c_ssd1306_hello.s` + tests
-   entry. Verify "HELLO" appears in the framebuffer end-to-end
-   via `cor24-emu --i2c-device ssd1306@0x3C`. Commit.
-2. **i2c-ssd1306-rtc-clock** — write `i2c_ssd1306_rtc_clock.s`
-   + tests entries (registered + non_halting). Verify two-device
-   end-to-end via
-   `cor24-emu --i2c-device 'ds1307@0x68?preset=system'
-                --i2c-device ssd1306@0x3C`. Commit.
+1. **fix-i2c-ssd1306-rtc-clock-read** — single step. Add
+   `i2creadnak`; retarget the 3rd read; verify with `--dump-i2c`
+   and visual byte-decode of the OLED data burst; check
+   regressions.
 
 ## When done
 
-Single `pr/i2c-ssd1306-demos` branch with both work commits.
-Then `pr/i2c-ssd1306-demos-saga-complete` as a strict superset
-per the Part 2 discipline.
+Two pr/ branches per the strict-superset discipline:
+- `pr/fix-i2c-ssd1306-rtc-clock-read` — the fix
+- `pr/fix-i2c-ssd1306-rtc-clock-read-saga-complete` — bookkeeping
+
+After mike relays, dwxas refreshes their sibling clone and
+rebuilds `pages/`.

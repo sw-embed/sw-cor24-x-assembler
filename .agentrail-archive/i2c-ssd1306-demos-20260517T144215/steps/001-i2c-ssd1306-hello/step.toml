@@ -1,0 +1,11 @@
+number = 1
+slug = "i2c-ssd1306-hello"
+status = "completed"
+description = """
+Write `src/examples/assembler/i2c_ssd1306_hello.s`: bit-bang i2c
+master that ..."""
+role = "production"
+context_files = []
+created_at = "2026-05-17T08:20:28"
+completed_at = "2026-05-17T08:24:28"
+commits = ["d1ac1dfa70b8e47dd4185b7bbccb4cc59bd78352"]
