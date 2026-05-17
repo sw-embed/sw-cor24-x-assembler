@@ -4,14 +4,25 @@
 ; at i2c address 0x68, formats them as "HH:MM:SS\n" and prints to UART.
 ; Halts after one read.
 ;
-; Pair with `cor24-emu --i2c-device ds1307@0x68`:
-;     cor24-asm src/examples/assembler/i2c_ds1307_read.s -o /tmp/ds.lgo
-;     cor24-emu --lgo /tmp/ds.lgo --i2c-device ds1307@0x68 --quiet
-;     # expect "00:00:00\n"  (CLI ds1307 spec accepts no params; defaults to
-;     # all-zero registers — set via the Ds1307HandleExt API or, when the
-;     # web RTC panel lands, via its slider/spinner UI)
+; CLI one-liners (per sw-cor24-emulator's ds1307-initial-time-and-system-preset
+; saga, shipped on origin/dev 07a0b69):
 ;
-; Without an i2c device attached, the emulator's bus returns 0 for SDA reads,
+;   # show the host clock (registry reads SystemTime::now() at attach time):
+;   cor24-asm src/examples/assembler/i2c_ds1307_read.s -o /tmp/r.lgo
+;   cor24-emu --lgo /tmp/r.lgo --i2c-device 'ds1307@0x68?preset=system'
+;
+;   # show a specific time (explicit BCD register values):
+;   cor24-emu --lgo /tmp/r.lgo \
+;       --i2c-device 'ds1307@0x68?hour=12&minute=34&second=56'
+;
+;   # default (no params): device boots at 00:00:00 and the demo prints that:
+;   cor24-emu --lgo /tmp/r.lgo --i2c-device ds1307@0x68
+;
+; The web RTC panel uses the runtime `Ds1307HandleExt::set_*` API to drive
+; mid-session updates via its slider; the CLI params above are the
+; equivalent at attach time.
+;
+; Without any i2c device attached, the emulator's bus returns 0 for SDA reads,
 ; so the output is indistinguishable from the all-zero device case
 ; ("00:00:00\n"). Either way the program halts cleanly after one read.
 ;
