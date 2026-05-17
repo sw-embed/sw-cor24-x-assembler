@@ -10,6 +10,13 @@
 ;               --i2c-device ds1307@0x68 --quiet
 ;     # expect "12:34:56\n"
 ;
+; If you just want to *see* the host time without typing it in via UART, use
+; the i2c_ds1307_read.s demo with `?preset=system` (shipped on
+; sw-cor24-emulator/origin/dev 07a0b69 via the ds1307-initial-time-and-
+; system-preset saga). This setter demo is for cases where you want to
+; *demonstrate* i2c writes to the live RTC registers (e.g. driving the
+; web RTC panel's display via the bit-bang path).
+;
 ; Without --uart-input the program busy-polls UART RX forever waiting for
 ; the 6 digits — that's the interactive case (use --terminal). The
 ; tests/integration_tests.rs harness handles this by adding the example to
