@@ -48,6 +48,10 @@ fn examples() -> Vec<(&'static str, &'static str)> {
             include_str!("../src/examples/assembler/i2c_ssd1306_hello.s"),
         ),
         (
+            "I2C OLED RTC Clock",
+            include_str!("../src/examples/assembler/i2c_ssd1306_rtc_clock.s"),
+        ),
+        (
             "I2C RTC Read",
             include_str!("../src/examples/assembler/i2c_ds1307_read.s"),
         ),
@@ -260,7 +264,8 @@ fn test_all_examples_halt() {
         "Button Echo",
         "Button Echo (MakerLisp)",
         "Echo",
-        "I2C RTC Set", // busy-polls UART RX waiting for 6 digits
+        "I2C OLED RTC Clock", // continuous RTC poll + OLED redraw
+        "I2C RTC Set",        // busy-polls UART RX waiting for 6 digits
         "Loop Trace",
     ];
     for (name, source) in examples() {

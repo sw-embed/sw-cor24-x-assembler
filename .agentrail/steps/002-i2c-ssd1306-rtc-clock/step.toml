@@ -1,0 +1,10 @@
+number = 2
+slug = "i2c-ssd1306-rtc-clock"
+status = "pending"
+description = """
+Write `src/examples/assembler/i2c_ssd1306_rtc_clock.s`: combines
+the DS1307 R..."""
+role = "legacy"
+context_files = []
+created_at = "2026-05-17T08:24:28"
+commits = []
