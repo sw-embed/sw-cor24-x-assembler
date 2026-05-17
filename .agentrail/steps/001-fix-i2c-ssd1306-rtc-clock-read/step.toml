@@ -1,0 +1,10 @@
+number = 1
+slug = "fix-i2c-ssd1306-rtc-clock-read"
+status = "in-progress"
+description = """
+Fix `src/examples/assembler/i2c_ssd1306_rtc_clock.s` per
+`dcxas-fix-i2c-ssd13..."""
+role = "production"
+context_files = []
+created_at = "2026-05-17T14:43:25"
+commits = []
