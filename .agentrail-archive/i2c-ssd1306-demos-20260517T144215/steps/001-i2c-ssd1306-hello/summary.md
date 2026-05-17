@@ -1,0 +1,1 @@
+Hello demo shipped. Init burst + 25-byte HELLO write via single i2c data transaction. Verified end-to-end via cor24-emu --i2c-device ssd1306@0x3C with --dump-i2c: all writes ACK'd, clean STOPs, halts in 6491 instructions. Registered in tests as 'I2C OLED Hello'. Saga setup also archived the prior i2c-ds1307-set saga.
