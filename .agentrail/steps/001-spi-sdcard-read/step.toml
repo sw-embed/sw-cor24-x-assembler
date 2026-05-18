@@ -1,0 +1,10 @@
+number = 1
+slug = "spi-sdcard-read"
+status = "in-progress"
+description = """
+Write `src/examples/assembler/spi_sdcard_read.s`: SD-SPI init,
+read sector 0,..."""
+role = "production"
+context_files = []
+created_at = "2026-05-18T07:17:14"
+commits = []
