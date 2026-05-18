@@ -1,0 +1,1 @@
+saga complete (fix-i2c-ssd1306-rtc-clock-read merged); starting spi-sdcard-and-nor-flash-demos per mike's brief
