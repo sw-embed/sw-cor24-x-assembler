@@ -1,0 +1,11 @@
+number = 2
+slug = "spi-nor-flash-demo"
+status = "completed"
+description = """
+Write `src/examples/assembler/spi_nor_flash_demo.s`: full
+read-erase-program-..."""
+role = "legacy"
+context_files = []
+created_at = "2026-05-18T08:22:10"
+completed_at = "2026-05-18T08:42:59"
+commits = ["06b30558139ebfdb69e69753b552e66d66028989"]
