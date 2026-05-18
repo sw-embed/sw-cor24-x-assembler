@@ -7,6 +7,7 @@ use cor24_emulator::cpu::state::CpuState;
 use cor24_emulator::loader::load_lgo;
 use cor24_emulator::peripherals::spi::SpiDevice;
 use cor24_emulator::peripherals::spi::devices::sdcard::SdCardDevice;
+use cor24_emulator::peripherals::spi::devices::w25q32::W25q32Device;
 use std::sync::{Arc, Mutex};
 
 /// Locally-bundled replacement for the `cor24_emulator::challenge::get_examples`
@@ -81,6 +82,10 @@ fn examples() -> Vec<(&'static str, &'static str)> {
         (
             "Nested Calls",
             include_str!("../src/examples/assembler/nested_calls.s"),
+        ),
+        (
+            "SPI NOR Flash Program",
+            include_str!("../src/examples/assembler/spi_nor_flash_demo.s"),
         ),
         (
             "SPI SD Card Read",
@@ -308,6 +313,36 @@ fn test_spi_sdcard_read_demo() {
     );
 }
 
+/// SPI NOR Flash Program: assemble, attach a fresh `W25q32Device` (4 MiB
+/// in-memory 0xFF scratch), run, and assert the UART output spans the
+/// full JEDEC ID + BEFORE (erased = FF FF FF FF) + AFTER (DE AD BE EF)
+/// sequence. ~1.13M instructions end-to-end (most spent in the WIP poll
+/// loop during sector erase + page program).
+#[test]
+fn test_spi_nor_flash_demo() {
+    let nor = W25q32Device::new();
+    let cpu = assemble_and_run_with_spi(
+        example_source("SPI NOR Flash Program"),
+        50_000_000,
+        nor,
+    );
+    assert!(
+        cpu.io.uart_output.contains("JEDEC: EF 40 16"),
+        "missing JEDEC line:\n{}",
+        cpu.io.uart_output
+    );
+    assert!(
+        cpu.io.uart_output.contains("BEFORE: FF FF FF FF"),
+        "missing BEFORE line (expected erased state):\n{}",
+        cpu.io.uart_output
+    );
+    assert!(
+        cpu.io.uart_output.contains("AFTER: DE AD BE EF"),
+        "missing AFTER line (expected programmed data):\n{}",
+        cpu.io.uart_output
+    );
+}
+
 /// All examples that terminate must reach halted state
 #[test]
 fn test_all_examples_halt() {
@@ -320,8 +355,10 @@ fn test_all_examples_halt() {
         "I2C OLED RTC Clock", // continuous RTC poll + OLED redraw
         "I2C RTC Set",        // busy-polls UART RX waiting for 6 digits
         "Loop Trace",
-        "SPI SD Card Read",   // hangs in CMD0-wait loop without a slave attached;
-                              //   end-to-end coverage is test_spi_sdcard_read_demo
+        "SPI NOR Flash Program", // hangs in WIP-poll loop without a slave;
+                                 //   covered by test_spi_nor_flash_demo
+        "SPI SD Card Read",      // hangs in CMD0-wait without a slave;
+                                 //   covered by test_spi_sdcard_read_demo
     ];
     for (name, source) in examples() {
         if non_halting.contains(&name) {
